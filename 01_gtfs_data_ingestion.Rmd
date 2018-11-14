@@ -34,7 +34,7 @@ CREATE TABLE agency
 COPY agency(agency_name, agency_url, agency_timezone, agency_lang, agency_phone, agency_fare_url) 
 FROM '/extdata/agency.txt' DELIMITER ',' CSV HEADER;
 ```
-```{sql}
+```{sql
 CREATE TABLE calendar
 (
   service_id VARCHAR(100) NOT NULL,
