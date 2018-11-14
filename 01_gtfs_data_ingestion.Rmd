@@ -1,5 +1,5 @@
 ---
-title: "Chicago GTFS data"
+title: "Chicago GTFS data ingestion"
 author: "jan.zymla"
 output: html_notebook
 ---
