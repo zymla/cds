@@ -13,8 +13,28 @@ library(purrr)
 ```
 GTFS data feed is available at `https://www.transitchicago.com/downloads/sch_data`
 ```{r}
-
+library(reticulate)
+library(docker)
 ```
+```{r}
+client <- docker$from_env()
+```
+
+```{r}
+data_folder_path = normalizePath('docker_volume', winslash = '/')
+vols <- reticulate::dict()
+vols[data_folder_path] <- reticulate::dict(bind = '/extdata/', mode = 'ro')
+vols
+```
+```{r}
+ports <- reticulate::dict('5432/tcp' = reticulate::tuple('127.0.0.1', as.integer(1100)))
+ports
+```
+
+```{r}
+pg <- client$containers$run(name = 'pg', image = "starefossen/pgrouting:latest", remove = TRUE, ports = ports, volumes = vols, detach = TRUE)
+```
+
 
 ```{sql}
 DROP TABLE IF EXISTS agency;
