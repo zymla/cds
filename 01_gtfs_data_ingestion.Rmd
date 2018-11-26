@@ -13,15 +13,21 @@ library(purrr)
 ```
 GTFS data feed is available at `https://www.transitchicago.com/downloads/sch_data`
 ```{r}
+library(uuid)
 library(reticulate)
 library(docker)
+library(RPostgres)
 ```
+```{r}
+getwd()
+```
+
 ```{r}
 client <- docker$from_env()
 ```
 
 ```{r}
-data_folder_path = normalizePath('docker_volume', winslash = '/')
+data_folder_path = normalizePath('data_raw', winslash = '\\')
 vols <- reticulate::dict()
 vols[data_folder_path] <- reticulate::dict(bind = '/extdata/', mode = 'ro')
 vols
@@ -30,14 +36,46 @@ vols
 ports <- reticulate::dict('5432/tcp' = reticulate::tuple('127.0.0.1', as.integer(1100)))
 ports
 ```
-
 ```{r}
-pg <- client$containers$run(name = 'pg', image = "starefossen/pgrouting:latest", remove = TRUE, ports = ports, volumes = vols, detach = TRUE)
+pwd <- uuid::UUIDgenerate() %>% as.character()
+env <- reticulate::dict('POSTGRES_PASSWORD' = pwd)
+env
 ```
 
 
-```{sql}
+```{r}
+pg <- client$containers$run(name = 'pg', image = "starefossen/pgrouting:latest", remove = TRUE, ports = ports, volumes = vols, detach = TRUE, environment = env)
+```
+
+# Now let's connect to the database
+```{r}
+pg_host <- 'localhost';
+pg_port <- '1100';
+pg_database <- 'postgres';
+pg_user <- 'postgres';
+pg_password <- pwd
+```
+
+
+```{r}
+con <- 
+  dbConnect(
+    Postgres(),
+    dbname = pg_database,
+    host = pg_host,
+    port = pg_port,
+    user = pg_user,
+    password = pg_password
+    )
+```
+
+
+```{sql, connection=con}
 DROP TABLE IF EXISTS agency;
+```
+
+
+```{sql, connection=con}
 CREATE TABLE agency
 (
 --  agency_id VARCHAR(100) NOT NULL PRIMARY KEY,
@@ -50,11 +88,11 @@ CREATE TABLE agency
 )
 ```
 
-```{sql}
+```{sql, connection=con}
 COPY agency(agency_name, agency_url, agency_timezone, agency_lang, agency_phone, agency_fare_url) 
 FROM '/extdata/agency.txt' DELIMITER ',' CSV HEADER;
 ```
-```{sql
+```{sql connection=con}
 CREATE TABLE calendar
 (
   service_id VARCHAR(100) NOT NULL,
@@ -70,13 +108,176 @@ CREATE TABLE calendar
   start_date_str CHAR(8),
   end_date_str CHAR(8));
 ```
-```{sql}
+```{sql, connection=con}
 COPY calendar(service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date_str, end_date_str) 
 FROM '/extdata/calendar.txt' DELIMITER ',' CSV HEADER;
 ```
 
-```{sql}
+```{sql connection=con}
 UPDATE calendar SET start_date = to_date(start_date_str, 'YYYYMMDD')::date;
+```
+```{sql connection=con}
 UPDATE calendar SET end_date = to_date(end_date_str, 'YYYYMMDD')::date;
 ```
+```{sql connection = con}
+CREATE TABLE calendar_dates
+(
+  service_id VARCHAR(100) NOT NULL,
+  date DATE,
+  exception_type SMALLINT,
+  date_str CHAR(8)
+  );
+```
 
+```{sql connection = con}
+COPY calendar_dates(service_id, date_str, exception_type) 
+FROM '/extdata/calendar_dates.txt' DELIMITER ',' CSV HEADER;
+```
+
+```{sql connection = con}
+UPDATE calendar_dates SET date = to_date(date_str, 'YYYYMMDD')::date;
+```
+```{sql connection = con}
+DROP TABLE IF EXISTS stop_times;
+```
+```{sql connection = con}
+CREATE TABLE stop_times
+(
+  trip_id VARCHAR(100) NOT NULL,
+  arrival_time interval,
+  departure_time interval,
+  stop_id VARCHAR(100),
+  stop_sequence INT,
+  stop_headsign VARCHAR(50),
+  pickup_type SMALLINT,
+  shape_dist_traveled INT);
+```
+```{sql connection = con}
+COPY stop_times(trip_id,arrival_time,departure_time,stop_id,stop_sequence,stop_headsign,pickup_type,shape_dist_traveled) 
+FROM '/extdata/stop_times.txt' DELIMITER ',' CSV HEADER;
+```
+```{sql connection = con}
+CREATE TABLE routes
+(
+  route_id VARCHAR(100) NOT NULL PRIMARY KEY,
+-- agency_id VARCHAR(100),
+  route_short_name VARCHAR(100),
+  route_long_name VARCHAR(100),
+--  route_desc VARCHAR(100),
+  route_type SMALLINT,
+  route_url VARCHAR(100),
+  route_color VARCHAR(100),
+  route_text_color VARCHAR(100));
+```
+```{sql connection = con}
+COPY routes(route_id, route_short_name, route_long_name, route_type, route_url, route_color, route_text_color) 
+FROM '/extdata/routes.txt' DELIMITER ',' CSV HEADER;
+```
+```{sql connection = con}
+DROP TABLE IF EXISTS stops;
+```
+```{sql connection = con}
+CREATE TABLE stops
+(
+  stop_id VARCHAR(100) NOT NULL PRIMARY KEY,
+  stop_code VARCHAR(100),
+  stop_name VARCHAR(100),
+  stop_desc VARCHAR(100),
+  stop_lat NUMERIC,
+  stop_long NUMERIC,
+--  zone_id VARCHAR(100),
+--  stop_url VARCHAR(100),
+  location_type SMALLINT,
+  parent_station VARCHAR(100),
+  wheelchair_boarding VARCHAR(100));
+```
+```{sql connection = con}
+COPY stops(stop_id, stop_code, stop_name, stop_desc, stop_lat, stop_long, location_type, parent_station, wheelchair_boarding) 
+FROM '/extdata/stops.txt' DELIMITER ',' CSV HEADER;
+```
+```{sql connection = con}
+DROP TABLE IF EXISTS transfers;
+```
+```{sql connection = con}
+CREATE TABLE transfers
+(
+  from_stop_id VARCHAR(100) NOT NULL,
+  to_stop_id VARCHAR(100) NOT NULL,
+  transfer_type SMALLINT,
+--  min_transfer_time  SMALLINT,
+  PRIMARY KEY(from_stop_id, to_stop_id)
+);
+```
+```{sql connection = con}
+COPY transfers(from_stop_id, to_stop_id, transfer_type) 
+FROM '/extdata/transfers.txt' DELIMITER ',' CSV HEADER;
+```
+```{sql connection = con}
+CREATE FUNCTION seconds_to_interval(int) RETURNS interval
+    AS $$ SELECT make_interval(secs => $1) $$
+    LANGUAGE SQL;
+```
+```{sql connection = con}
+ALTER TABLE transfers ADD COLUMN min_transfer_time interval;
+```
+```{sql connection = con}
+UPDATE transfers SET min_transfer_time = seconds_to_interval(60);
+```
+```{sql connection = con}
+DROP TABLE IF EXISTS trips;
+```
+```{sql connection = con}
+CREATE TABLE trips(
+  route_id VARCHAR(100),
+  service_id VARCHAR(100),
+  trip_id  VARCHAR(100) NOT NULL PRIMARY KEY,
+--  trip_headsign  VARCHAR(100),
+--  trip_short_name VARCHAR(100),
+  direction_id SMALLINT,
+  block_id VARCHAR(100),
+  shape_id VARCHAR(100),
+  direction VARCHAR(50),
+  wheelchair_accessible SMALLINT,
+--  bikes_allowed SMALLINT,
+--  trip_desc VARCHAR(100),
+  schd_trip_id  VARCHAR(100)
+  );
+```
+```{sql connection = con}
+COPY trips(route_id,service_id,trip_id,direction_id,block_id,shape_id,direction,wheelchair_accessible,schd_trip_id) 
+FROM '/extdata/trips.txt' DELIMITER ',' CSV HEADER;
+```
+```{sql connection = con}
+CREATE TABLE route_type_names(
+  route_type SMALLINT  PRIMARY KEY,
+  route_type_name VARCHAR(100)
+  );
+```
+```{python}
+import pandas as pd
+route_type_names = pd.DataFrame(data={'route_type': [0, 1, 2, 3, 7], 'route_type_name': ['tram', 'metro', 'rail', 'bus', 'funicular']})
+route_type_names.reset_index().drop('index', 1)
+route_type_names
+```
+```{r}
+route_type_names <- 
+  tribble(
+    ~route_type, ~route_type_name,
+    0, 'tram',
+    1, 'metro',
+    2, 'rail',
+    3, 'bus',
+    7, 'funicular'
+  )
+route_type_names
+```
+
+```{sql connection = con}
+
+```
+```{sql connection = con}
+
+```
+```{sql connection = con}
+
+```
