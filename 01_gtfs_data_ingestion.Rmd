@@ -42,10 +42,21 @@ env <- reticulate::dict('POSTGRES_PASSWORD' = pwd)
 env
 ```
 
-
+## Start the container
 ```{r}
 pg <- client$containers$run(name = 'pg', image = "starefossen/pgrouting:latest", remove = TRUE, ports = ports, volumes = vols, detach = TRUE, environment = env)
 ```
+
+# Download and extract GTFS data
+```{r}
+temp <- tempfile()
+download.file('https://www.transitchicago.com/downloads/sch_data/google_transit.zip', temp)
+```
+```{r}
+unzip(zipfile = temp, exdir = data_folder_path)
+```
+
+
 
 # Now let's connect to the database
 ```{r}
@@ -247,12 +258,7 @@ CREATE TABLE trips(
 COPY trips(route_id,service_id,trip_id,direction_id,block_id,shape_id,direction,wheelchair_accessible,schd_trip_id) 
 FROM '/extdata/trips.txt' DELIMITER ',' CSV HEADER;
 ```
-```{sql connection = con}
-CREATE TABLE route_type_names(
-  route_type SMALLINT  PRIMARY KEY,
-  route_type_name VARCHAR(100)
-  );
-```
+
 ```{python}
 import pandas as pd
 route_type_names = pd.DataFrame(data={'route_type': [0, 1, 2, 3, 7], 'route_type_name': ['tram', 'metro', 'rail', 'bus', 'funicular']})
@@ -271,7 +277,339 @@ route_type_names <-
   )
 route_type_names
 ```
+```{r}
+dbWriteTable(
+  con, 
+  'route_type_names',
+  route_type_names, 
+  overwrite = TRUE, 
+  field.types = c('route_type' = 'SMALLINT', 'route_type_name' = 'VARCHAR(100)')
+  )
+```
 
+
+# GTFS data processing
+```{sql connection = con}
+CREATE TABLE routes_rail AS
+SELECT routes.*, route_type_name FROM
+routes JOIN route_type_names ON routes.route_type = route_type_names.route_type
+WHERE route_type_names.route_type_name != 'bus';
+```
+## calender_dates
+exception_type	Required	The exception_type indicates whether service is available on the date specified in the date field.
+* A value of 1 indicates that service has been added for the specified date.
+* A value of 2 indicates that service has been removed for the specified date.
+For example, suppose a route has one set of trips available on holidays and another set of trips available on all other days. You could have one service_id that corresponds to the regular service schedule and another service_id that corresponds to the holiday schedule. For a particular holiday, you would use the calendar_dates.txt file to add the holiday to the holiday service_id and to remove the holiday from the regular service_id schedule.
+```{sql connection = con}
+DROP TABLE IF EXISTS trips_rail_tuesday;
+```
+```{sql connection = con}
+CREATE TABLE trips_rail_tuesday AS
+SELECT trips_rail.* FROM
+(
+	SELECT
+		trips.*,
+		route_short_name,
+		route_long_name,
+		route_color,
+		route_text_color,
+        route_type_name
+	FROM trips
+	INNER JOIN routes_rail
+	ON trips.route_id = routes_rail.route_id
+ ) trips_rail INNER JOIN 
+(SELECT coalesce(calendar.service_id, calendar_dates.service_id) AS service_id -- date(date_trunc('week', date '2018-11-18' + 5)) + 1, calendar.service_id, calendar_dates.service_id, *
+FROM calendar FULL JOIN calendar_dates
+ON calendar.service_id = calendar_dates.service_id AND date(date_trunc('week', date '2018-11-12' + 5)) + 1 = calendar_dates.date
+ WHERE	(date(date_trunc('week', date '2018-11-18' + 5)) + 1 BETWEEN start_date AND end_date + 1
+ 			AND tuesday = 1
+			AND (exception_type IS NULL OR exception_type = 1)
+		) 
+	OR (exception_type = 1 AND date = date(date_trunc('week', date '2018-11-18' + 5)))) services 
+ON trips_rail.service_id = services.service_id;
+```
+```{sql connection = con}
+DROP TABLE IF EXISTS stop_times_rail_tuesday;
+```
+```{sql connection = con}
+CREATE TABLE stop_times_rail_tuesday AS
+SELECT 
+    stops.stop_id,
+    stop_name,
+    stop_lat,
+    stop_long,
+	trips_rail_tuesday.*,
+	arrival_time,
+	departure_time,
+	stop_sequence,
+	pickup_type -- ,
+--	drop_off_type
+FROM trips_rail_tuesday
+INNER JOIN stop_times ON trips_rail_tuesday.trip_id = stop_times.trip_id
+LEFT JOIN stops ON stops.stop_id = stop_times.stop_id;
+```
+```{sql connection = con}
+DROP TABLE IF EXISTS nodes_gtfs;
+```
+```{sql connection = con}
+CREATE TABLE nodes_gtfs AS
+SELECT
+	trip_id||'::'||stop_sequence||'::dep' AS node_id,
+	departure_time||' ('||route_short_name||') '||stop_name||' ->' AS node_name,
+	'stop_departure' AS node_type,
+	departure_time AS node_time,
+	stop_id,
+	stop_name,
+	stop_lat AS lat,
+	stop_long AS lon,
+	route_id,
+--	route_short_name,
+--	route_long_name,
+    route_type_name,
+	route_color,
+	route_text_color,
+    trip_id,
+    stop_sequence -- ,
+--	trip_short_name,
+--	trip_headsign
+	FROM stop_times_rail_tuesday
+UNION ALL
+SELECT
+	trip_id||'::'||stop_sequence||'::arr' AS node_id,
+	arrival_time||' ('||route_short_name||') '||stop_name||' <-' AS node_name,
+	'stop_arrival' AS node_type,
+	arrival_time AS node_time,
+	stop_id,
+	stop_name,
+	stop_lat AS lat,
+	stop_long AS lon,
+	route_id,
+--	route_short_name,
+--	route_long_name,
+    route_type_name,
+	route_color,
+	route_text_color,
+    trip_id,
+    stop_sequence --,
+--	trip_short_name,
+--	trip_headsign
+	FROM stop_times_rail_tuesday
+UNION ALL
+SELECT DISTINCT ON (stop_id)
+	stop_id||'::entry' AS node_id,
+	'entry_node : ' || stop_name AS node_name,
+	'entry_node' AS node_type,
+	CAST(NULL AS INTERVAL) AS node_time,
+	stop_id,
+	stop_name,
+	stop_lat AS lat,
+	stop_long AS lon,
+	CAST(NULL AS TEXT) AS route_id,
+--	CAST(NULL AS TEXT) AS route_short_name,
+--	CAST(NULL AS TEXT) AS route_long_name,
+    'walk' AS route_type_name,
+	CAST(NULL AS TEXT) AS route_color,
+	CAST(NULL AS TEXT) AS route_text_color,
+    CAST(NULL AS TEXT) AS trip_id,
+    CAST(NULL AS SMALLINT) AS stop_sequence --,
+--	CAST(NULL AS TEXT) AS trip_short_name,
+--	CAST(NULL AS TEXT) AS trip_headsign
+	FROM stop_times_rail_tuesday
+UNION ALL
+SELECT
+	stop_id||'::exit' AS node_id,
+	'exit_node : ' || stop_name AS node_name,
+	'exit_node' AS node_type,
+	CAST(NULL AS INTERVAL) AS node_time,
+	stop_id,
+	stop_name,
+	stop_lat AS lat,
+	stop_long AS lon,
+	CAST(NULL AS TEXT) AS route_id,
+--	CAST(NULL AS TEXT) AS route_short_name,
+--	CAST(NULL AS TEXT) AS route_long_name,
+    'walk' AS route_type_name,
+	CAST(NULL AS TEXT) AS route_color,
+	CAST(NULL AS TEXT) AS route_text_color,
+    CAST(NULL AS TEXT) AS trip_id,
+    CAST(NULL AS SMALLINT) AS stop_sequence -- ,
+--	CAST(NULL AS TEXT) AS trip_short_name,
+--	CAST(NULL AS TEXT) AS trip_headsign
+	FROM stop_times_rail_tuesday
+;
+```
+```{sql connection = con}
+DROP TABLE IF EXISTS edges_gtfs;
+```
+```{sql connection = con}
+CREATE TABLE edges_gtfs AS
+SELECT
+	'wait_aboard' AS edge_type,
+	nodes_stop_arrivals.node_id AS from_node_id,
+	nodes_stop_arrivals.node_name AS from_node_name,
+	nodes_stop_arrivals.node_time AS from_node_time,
+	nodes_stop_departures.node_id AS to_node_id,
+	nodes_stop_departures.node_name AS to_node_name,
+	nodes_stop_departures.node_time AS to_node_time,
+	EXTRACT(EPOCH FROM (nodes_stop_departures.node_time - nodes_stop_arrivals.node_time)) AS cost
+FROM (
+        SELECT * 
+        FROM nodes_gtfs
+        WHERE node_type = 'stop_departure'
+        ) nodes_stop_departures
+JOIN (
+        SELECT * 
+        FROM nodes_gtfs
+        WHERE node_type = 'stop_arrival'
+        ) nodes_stop_arrivals
+ON nodes_stop_departures.trip_id = nodes_stop_arrivals.trip_id
+AND nodes_stop_departures.stop_sequence = nodes_stop_arrivals.stop_sequence
+
+UNION ALL
+
+SELECT
+	nodes_stop_departures.route_type_name AS edge_type,
+	nodes_stop_departures.node_id AS from_node_id,
+	nodes_stop_departures.node_name AS from_node_name,
+	nodes_stop_departures.node_time AS from_node_time,
+	nodes_stop_arrivals.node_id AS to_node_id,
+	nodes_stop_arrivals.node_name AS to_node_name,
+	nodes_stop_arrivals.node_time AS to_node_time,
+	EXTRACT(EPOCH FROM (nodes_stop_arrivals.node_time - nodes_stop_departures.node_time)) AS cost
+FROM (
+        SELECT * 
+        FROM nodes_gtfs
+        WHERE node_type = 'stop_departure'
+        ) nodes_stop_departures
+INNER JOIN (
+        SELECT * 
+        FROM nodes_gtfs
+        WHERE node_type = 'stop_arrival'
+        ) nodes_stop_arrivals
+ON nodes_stop_departures.trip_id = nodes_stop_arrivals.trip_id
+AND nodes_stop_departures.stop_sequence + 1 = nodes_stop_arrivals.stop_sequence
+
+UNION ALL
+
+SELECT
+	'transfer_same_stop' AS edge_type,
+	nodes_stop_arrivals.node_id AS from_node_id,
+	nodes_stop_arrivals.node_name AS from_node_name,
+	nodes_stop_arrivals.node_time AS from_node_time,
+	nodes_stop_departures.node_id AS to_node_id,
+	nodes_stop_departures.node_name AS to_node_name,
+	nodes_stop_departures.node_time AS to_node_time,
+	EXTRACT(EPOCH FROM (nodes_stop_departures.node_time - nodes_stop_arrivals.node_time)) AS cost
+FROM (
+        SELECT * 
+        FROM nodes_gtfs
+        WHERE node_type = 'stop_departure'
+        ) nodes_stop_departures
+INNER JOIN (
+        SELECT * 
+        FROM nodes_gtfs
+        WHERE node_type = 'stop_arrival'
+        ) nodes_stop_arrivals
+    ON nodes_stop_departures.stop_id = nodes_stop_arrivals.stop_id
+	AND nodes_stop_departures.node_time >= nodes_stop_arrivals.node_time + '30 secs'
+	AND nodes_stop_departures.node_time <= nodes_stop_arrivals.node_time + '1 hour'
+    
+UNION ALL
+SELECT
+	'transfer' AS edge_type,
+	nodes_stop_arrivals.node_id AS from_node_id,
+	nodes_stop_arrivals.node_name AS from_node_name,
+	nodes_stop_arrivals.node_time AS from_node_time,
+	nodes_stop_departures.node_id AS to_node_id,
+	nodes_stop_departures.node_name AS to_node_name,
+	nodes_stop_departures.node_time AS to_node_time,
+	EXTRACT(EPOCH FROM (nodes_stop_departures.node_time - nodes_stop_arrivals.node_time)) AS cost
+FROM (
+        SELECT * 
+        FROM nodes_gtfs
+        WHERE node_type = 'stop_arrival'
+        ) nodes_stop_arrivals 
+    JOIN transfers ON nodes_stop_arrivals.stop_id = transfers.from_stop_id
+    JOIN (
+        SELECT * 
+        FROM nodes_gtfs
+        WHERE node_type = 'stop_departure'
+        ) nodes_stop_departures
+        ON nodes_stop_departures.stop_id = transfers.to_stop_id
+WHERE nodes_stop_departures.node_time >= nodes_stop_arrivals.node_time + min_transfer_time
+	AND nodes_stop_departures.node_time <= nodes_stop_arrivals.node_time + '1 hour'
+
+UNION ALL
+
+SELECT
+	'entry_edge' AS edge_type,
+	nodes_entry.node_id AS from_node_id,
+	nodes_entry.node_name AS from_node_name,
+	nodes_entry.node_time AS from_node_time,
+	nodes_stop_departures.node_id AS to_node_id,
+	nodes_stop_departures.node_name AS to_node_name,
+	nodes_stop_departures.node_time AS to_node_time,
+	0::INTEGER AS cost
+FROM (
+        SELECT * 
+        FROM nodes_gtfs
+        WHERE node_type = 'stop_departure'
+        ) nodes_stop_departures
+JOIN (
+        SELECT * 
+        FROM nodes_gtfs
+        WHERE node_type = 'entry_node'
+        ) nodes_entry ON nodes_stop_departures.stop_id = nodes_entry.stop_id
+UNION ALL
+SELECT
+	'exit_edge' AS edge_type,
+	nodes_stop_arrivals.node_id AS from_node_id,
+	nodes_stop_arrivals.node_name AS from_node_name,
+	nodes_stop_arrivals.node_time AS from_node_time,
+	nodes_exit.node_id AS to_node_id,
+	nodes_exit.node_name AS to_node_name,
+	nodes_exit.node_time AS to_node_time,
+	0::INTEGER AS cost
+FROM (
+        SELECT * 
+        FROM nodes_gtfs
+        WHERE node_type = 'stop_arrival'
+        ) nodes_stop_arrivals 
+JOIN (
+        SELECT * 
+        FROM nodes_gtfs
+        WHERE node_type = 'exit_node'
+        ) nodes_exit ON nodes_stop_arrivals.stop_id = nodes_exit.stop_id
+
+
+```
+```{sql connection = con}
+
+```
+```{sql connection = con}
+
+```
+```{sql connection = con}
+
+```
+```{sql connection = con}
+
+```
+```{sql connection = con}
+
+```
+```{sql connection = con}
+
+```
+```{sql connection = con}
+
+```
+```{sql connection = con}
+
+```
+```{sql connection = con}
+
+```
 ```{sql connection = con}
 
 ```
