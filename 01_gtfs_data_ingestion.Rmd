@@ -414,7 +414,11 @@ SELECT DISTINCT ON (stop_id)
     CAST(NULL AS SMALLINT) AS stop_sequence --,
 --	CAST(NULL AS TEXT) AS trip_short_name,
 --	CAST(NULL AS TEXT) AS trip_headsign
-	FROM stop_times_rail_tuesday
+	FROM (
+	  SELECT stop_id, stop_name, stop_lat, stop_long
+	  FROM stop_times_rail_tuesday
+	  GROUP BY stop_id, stop_name, stop_lat, stop_long 
+	  ) stop_times_rail_tuesday_distinct_entry
 UNION ALL
 SELECT
 	stop_id||'::exit' AS node_id,
@@ -435,7 +439,11 @@ SELECT
     CAST(NULL AS SMALLINT) AS stop_sequence -- ,
 --	CAST(NULL AS TEXT) AS trip_short_name,
 --	CAST(NULL AS TEXT) AS trip_headsign
-	FROM stop_times_rail_tuesday
+	FROM (
+	  SELECT stop_id, stop_name, stop_lat, stop_long
+	  FROM stop_times_rail_tuesday
+	  GROUP BY stop_id, stop_name, stop_lat, stop_long 
+	  ) stop_times_rail_tuesday_distinct_exit
 ;
 ```
 ```{sql connection = con}
@@ -661,7 +669,15 @@ UPDATE edges_gtfs
 SET geom = ST_SetSRID(ST_MakeLine(ST_POINT(from_lon, from_lat)::geometry, ST_POINT(to_lon, to_lat)::geometry),4326)
 ```
 ```{sql connection = con}
-
+SELECT edge_type, count(*)
+FROM edges_gtfs
+GROUP BY edge_type
+LIMIT 10
+```
+```{sql connection = con}
+SELECT route_type_name, count(*)
+FROM edges_gtfs
+GROUP BY route_type_name
 ```
 ```{sql connection = con}
 
