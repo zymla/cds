@@ -439,19 +439,51 @@ SELECT
 ;
 ```
 ```{sql connection = con}
+ALTER TABLE nodes_gtfs ADD id serial PRIMARY KEY
+```
+
+```{sql connection = con}
+ALTER TABLE nodes_gtfs ADD  geog geometry
+```
+```{sql connection = con}
+UPDATE nodes_gtfs
+SET geog = ST_SetSRID(ST_POINT(lon, lat),4326)
+```
+```{sql connection = con}
+
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+
+
+
+
+
+```{sql connection = con}
 DROP TABLE IF EXISTS edges_gtfs;
 ```
 ```{sql connection = con}
 CREATE TABLE edges_gtfs AS
 SELECT
+  nodes_stop_arrivals.id AS source,
+  nodes_stop_departures.id AS target,
 	'wait_aboard' AS edge_type,
 	nodes_stop_arrivals.node_id AS from_node_id,
 	nodes_stop_arrivals.node_name AS from_node_name,
 	nodes_stop_arrivals.node_time AS from_node_time,
+	nodes_stop_arrivals.lat AS from_lat,
+	nodes_stop_arrivals.lon AS from_lon,
 	nodes_stop_departures.node_id AS to_node_id,
 	nodes_stop_departures.node_name AS to_node_name,
 	nodes_stop_departures.node_time AS to_node_time,
-	EXTRACT(EPOCH FROM (nodes_stop_departures.node_time - nodes_stop_arrivals.node_time)) AS cost
+	nodes_stop_departures.lat AS to_lat,
+	nodes_stop_departures.lon AS to_lon,
+	EXTRACT(EPOCH FROM (nodes_stop_departures.node_time - nodes_stop_arrivals.node_time)) AS cost,
+	99999::INTEGER AS reverse_cost
 FROM (
         SELECT * 
         FROM nodes_gtfs
@@ -468,14 +500,21 @@ AND nodes_stop_departures.stop_sequence = nodes_stop_arrivals.stop_sequence
 UNION ALL
 
 SELECT
+  nodes_stop_departures.id AS source,
+  nodes_stop_arrivals.id AS target,
 	nodes_stop_departures.route_type_name AS edge_type,
 	nodes_stop_departures.node_id AS from_node_id,
 	nodes_stop_departures.node_name AS from_node_name,
 	nodes_stop_departures.node_time AS from_node_time,
+	nodes_stop_departures.lat AS from_lat,
+	nodes_stop_departures.lon AS from_lon,
 	nodes_stop_arrivals.node_id AS to_node_id,
 	nodes_stop_arrivals.node_name AS to_node_name,
 	nodes_stop_arrivals.node_time AS to_node_time,
-	EXTRACT(EPOCH FROM (nodes_stop_arrivals.node_time - nodes_stop_departures.node_time)) AS cost
+	nodes_stop_arrivals.lat AS to_lat,
+	nodes_stop_arrivals.lon AS to_lon,
+	EXTRACT(EPOCH FROM (nodes_stop_arrivals.node_time - nodes_stop_departures.node_time)) AS cost,
+	99999::INTEGER AS reverse_cost
 FROM (
         SELECT * 
         FROM nodes_gtfs
@@ -492,14 +531,21 @@ AND nodes_stop_departures.stop_sequence + 1 = nodes_stop_arrivals.stop_sequence
 UNION ALL
 
 SELECT
+  nodes_stop_arrivals.id AS source,
+  nodes_stop_departures.id AS target,
 	'transfer_same_stop' AS edge_type,
 	nodes_stop_arrivals.node_id AS from_node_id,
 	nodes_stop_arrivals.node_name AS from_node_name,
 	nodes_stop_arrivals.node_time AS from_node_time,
+	nodes_stop_arrivals.lat AS from_lat,
+	nodes_stop_arrivals.lon AS from_lon,
 	nodes_stop_departures.node_id AS to_node_id,
 	nodes_stop_departures.node_name AS to_node_name,
 	nodes_stop_departures.node_time AS to_node_time,
-	EXTRACT(EPOCH FROM (nodes_stop_departures.node_time - nodes_stop_arrivals.node_time)) AS cost
+	nodes_stop_departures.lat AS to_lat,
+	nodes_stop_departures.lon AS to_lon,
+	EXTRACT(EPOCH FROM (nodes_stop_departures.node_time - nodes_stop_arrivals.node_time)) AS cost,
+	99999::INTEGER AS reverse_cost
 FROM (
         SELECT * 
         FROM nodes_gtfs
@@ -516,14 +562,21 @@ INNER JOIN (
     
 UNION ALL
 SELECT
+  nodes_stop_arrivals.id AS source,
+  nodes_stop_departures.id AS target,
 	'transfer' AS edge_type,
 	nodes_stop_arrivals.node_id AS from_node_id,
 	nodes_stop_arrivals.node_name AS from_node_name,
 	nodes_stop_arrivals.node_time AS from_node_time,
+	nodes_stop_arrivals.lat AS from_lat,
+	nodes_stop_arrivals.lon AS from_lon,
 	nodes_stop_departures.node_id AS to_node_id,
 	nodes_stop_departures.node_name AS to_node_name,
 	nodes_stop_departures.node_time AS to_node_time,
-	EXTRACT(EPOCH FROM (nodes_stop_departures.node_time - nodes_stop_arrivals.node_time)) AS cost
+	nodes_stop_departures.lat AS to_lat,
+	nodes_stop_departures.lon AS to_lon,
+	EXTRACT(EPOCH FROM (nodes_stop_departures.node_time - nodes_stop_arrivals.node_time)) AS cost,
+	99999::INTEGER AS reverse_cost
 FROM (
         SELECT * 
         FROM nodes_gtfs
@@ -542,14 +595,21 @@ WHERE nodes_stop_departures.node_time >= nodes_stop_arrivals.node_time + min_tra
 UNION ALL
 
 SELECT
+  nodes_entry.id AS source,
+  nodes_stop_departures.id AS target,
 	'entry_edge' AS edge_type,
 	nodes_entry.node_id AS from_node_id,
 	nodes_entry.node_name AS from_node_name,
 	nodes_entry.node_time AS from_node_time,
+	nodes_entry.lat AS from_lat,
+	nodes_entry.lon AS from_lon,
 	nodes_stop_departures.node_id AS to_node_id,
 	nodes_stop_departures.node_name AS to_node_name,
 	nodes_stop_departures.node_time AS to_node_time,
-	0::INTEGER AS cost
+	nodes_stop_departures.lat AS to_lat,
+	nodes_stop_departures.lon AS to_lon,
+	0::INTEGER AS cost,
+	99999::INTEGER AS reverse_cost
 FROM (
         SELECT * 
         FROM nodes_gtfs
@@ -562,14 +622,21 @@ JOIN (
         ) nodes_entry ON nodes_stop_departures.stop_id = nodes_entry.stop_id
 UNION ALL
 SELECT
+  nodes_stop_arrivals.id AS source,
+  nodes_exit.id AS target,
 	'exit_edge' AS edge_type,
 	nodes_stop_arrivals.node_id AS from_node_id,
 	nodes_stop_arrivals.node_name AS from_node_name,
 	nodes_stop_arrivals.node_time AS from_node_time,
+	nodes_stop_arrivals.lat AS from_lat,
+	nodes_stop_arrivals.lon AS from_lon,
 	nodes_exit.node_id AS to_node_id,
 	nodes_exit.node_name AS to_node_name,
 	nodes_exit.node_time AS to_node_time,
-	0::INTEGER AS cost
+	nodes_exit.lat AS to_lat,
+	nodes_exit.lon AS to_lon,
+	0::INTEGER AS cost,
+	99999::INTEGER AS reverse_cost
 FROM (
         SELECT * 
         FROM nodes_gtfs
@@ -584,10 +651,14 @@ JOIN (
 
 ```
 ```{sql connection = con}
-
+ALTER TABLE edges_gtfs ADD id serial PRIMARY KEY
 ```
 ```{sql connection = con}
-
+ALTER TABLE edges_gtfs ADD  geom geometry
+```
+```{sql connection = con}
+UPDATE edges_gtfs
+SET geom = ST_SetSRID(ST_MakeLine(ST_POINT(from_lon, from_lat)::geometry, ST_POINT(to_lon, to_lat)::geometry),4326)
 ```
 ```{sql connection = con}
 
