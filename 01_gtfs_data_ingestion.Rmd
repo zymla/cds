@@ -259,7 +259,7 @@ COPY trips(route_id,service_id,trip_id,direction_id,block_id,shape_id,direction,
 FROM '/extdata/trips.txt' DELIMITER ',' CSV HEADER;
 ```
 
-```{python}
+```{python eval=FALSE}
 import pandas as pd
 route_type_names = pd.DataFrame(data={'route_type': [0, 1, 2, 3, 7], 'route_type_name': ['tram', 'metro', 'rail', 'bus', 'funicular']})
 route_type_names.reset_index().drop('index', 1)
@@ -674,28 +674,77 @@ FROM edges_gtfs
 GROUP BY edge_type
 LIMIT 10
 ```
+
 ```{sql connection = con}
-SELECT route_type_name, count(*)
+SELECT *
 FROM edges_gtfs
-GROUP BY route_type_name
+LIMIT 10
+```
+
+```{sql connection = con}
+SELECT edge_type, count(*)
+FROM edges_gtfs
+GROUP BY edge_type
 ```
 ```{sql connection = con}
+SELECT node_type, count(*)
+FROM nodes_gtfs
+GROUP BY node_type
+```
+
+```{sql connection = con}
+SELECT *
+FROM nodes_gtfs
+WHERE node_type = 'entry_node'
+LIMIT 10
+```
+
+```{sql connection = con}
+SELECT *
+FROM nodes_gtfs
+WHERE node_type = 'exit_node'
+ORDER BY stop_name
+-- LIMIT 100
+```
+```{sql connection = con}
+SELECT *
+FROM nodes_gtfs
+WHERE node_type = 'stop_departure' AND stop_name = 'O''Hare' AND node_time > '19:30'
+ORDER BY node_time 
+LIMIT 10
+```
+```{sql connection = con}
+SELECT *
+FROM nodes_gtfs
+WHERE node_type = 'exit_node' AND stop_name LIKE 'Clinton%'
 
 ```
 ```{sql connection = con}
-
+SELECT X.*
+FROM pgr_Dijkstra(
+	'SELECT id, source, target, cost, reverse_cost FROM edges_gtfs',
+	29070,
+    105552,
+	FALSE
+	) AS X
+ORDER BY seq;
 ```
 ```{sql connection = con}
-
+SELECT r.*, edges_gtfs.*
+FROM edges_gtfs
+INNER JOIN (SELECT X.*
+FROM pgr_Dijkstra(
+	'SELECT id, source, target, cost, reverse_cost FROM edges_gtfs',
+	29070,
+    105552,
+    TRUE
+	) AS X
+ORDER BY seq) r ON edges_gtfs.id = r.edge
 ```
 ```{sql connection = con}
-
-```
-```{sql connection = con}
-
-```
-```{sql connection = con}
-
+SELECT *
+FROM edges_gtfs
+WHERE target = 105552
 ```
 ```{sql connection = con}
 
