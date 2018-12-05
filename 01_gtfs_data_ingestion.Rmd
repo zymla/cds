@@ -48,11 +48,11 @@ pg <- client$containers$run(name = 'pg', image = "starefossen/pgrouting:latest",
 ```
 
 # Download and extract GTFS data
-```{r}
+```{r eval=FALSE}
 temp <- tempfile()
 download.file('https://www.transitchicago.com/downloads/sch_data/google_transit.zip', temp)
 ```
-```{r}
+```{r eval=FALSE}
 unzip(zipfile = temp, exdir = data_folder_path)
 ```
 
@@ -790,9 +790,35 @@ ORDER BY seq) r ON edges_gtfs.id = r.edge
 ```
 
 ```{sql connection = con}
+SELECT *
+FROM nodes_gtfs
+WHERE  stop_name = 'Midway' AND node_type = 'entry_node'
 ```
 ```{sql connection = con}
+SELECT r.*, edges_gtfs.*
+FROM edges_gtfs
+INNER JOIN (SELECT X.*
+FROM pgr_Dijkstra(
+	'SELECT id, source, target, cost, reverse_cost FROM edges_gtfs',
+	105347,
+    81656,
+    TRUE
+	) AS X
+ORDER BY seq) r ON edges_gtfs.id = r.edge
 ```
+#Leaflet
+
+```{r}
+library(leaflet)
+```
+```{r}
+leaflet() %>% 
+  setView(lng = -88, lat = 42, zoom = 9) %>% 
+  addProviderTiles(providers$CartoDB.Positron)
+```
+
+
+
 ```{sql connection = con}
 ```
 ```{sql connection = con}
