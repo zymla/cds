@@ -747,11 +747,81 @@ FROM edges_gtfs
 WHERE target = 105552
 ```
 ```{sql connection = con}
-
+SELECT *
+FROM stop_times_rail_tuesday
+WHERE trip_id = '58139913806'
+ORDER BY stop_sequence
 ```
 ```{sql connection = con}
-
+SELECT * FROM nodes_gtfs WHERE stop_name = 'O''Hare' AND node_time = '19:35:30'
 ```
 ```{sql connection = con}
+SELECT * FROM nodes_gtfs WHERE stop_name = 'LaSalle' AND node_time = '18:51:00'
+```
 
+```{sql connection = con}
+SELECT r.*, edges_gtfs.*
+FROM edges_gtfs
+INNER JOIN (SELECT X.*
+FROM pgr_Dijkstra(
+	'SELECT id, source, target, cost, reverse_cost FROM edges_gtfs',
+	29050,
+    81656,
+    TRUE
+	) AS X
+ORDER BY seq) r ON edges_gtfs.id = r.edge
+```
+```{sql connection = con}
+SELECT *
+FROM nodes_gtfs
+WHERE  stop_name = 'LaSalle' AND node_type = 'entry_node'
+```
+```{sql connection = con}
+SELECT r.*, edges_gtfs.*
+FROM edges_gtfs
+INNER JOIN (SELECT X.*
+FROM pgr_Dijkstra(
+	'SELECT id, source, target, cost, reverse_cost FROM edges_gtfs',
+	105428,
+    81656,
+    TRUE
+	) AS X
+ORDER BY seq) r ON edges_gtfs.id = r.edge
+```
+
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
+```
+```{sql connection = con}
 ```
