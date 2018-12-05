@@ -814,7 +814,7 @@ library(leaflet)
 ```{r}
 leaflet() %>% 
   setView(lng = -88, lat = 42, zoom = 9) %>% 
-  addProviderTiles(providers$CartoDB.Positron)
+  addProviderTiles(providers$Stamen.Toner)
 ```
 
 
