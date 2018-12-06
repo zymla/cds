@@ -351,6 +351,7 @@ LEFT JOIN stops ON stops.stop_id = stop_times.stop_id;
 ```{sql connection = con}
 DROP TABLE IF EXISTS nodes_gtfs;
 ```
+## Nodes
 ```{sql connection = con}
 CREATE TABLE nodes_gtfs AS
 SELECT
@@ -474,6 +475,7 @@ SET geog = ST_SetSRID(ST_POINT(lon, lat),4326)
 ```{sql connection = con}
 DROP TABLE IF EXISTS edges_gtfs;
 ```
+## Edges
 ```{sql connection = con}
 CREATE TABLE edges_gtfs AS
 SELECT
@@ -490,6 +492,7 @@ SELECT
 	nodes_stop_departures.node_time AS to_node_time,
 	nodes_stop_departures.lat AS to_lat,
 	nodes_stop_departures.lon AS to_lon,
+	CAST(NULL AS TEXT) AS route_color,
 	EXTRACT(EPOCH FROM (nodes_stop_departures.node_time - nodes_stop_arrivals.node_time)) AS cost,
 	99999::INTEGER AS reverse_cost
 FROM (
@@ -521,6 +524,7 @@ SELECT
 	nodes_stop_arrivals.node_time AS to_node_time,
 	nodes_stop_arrivals.lat AS to_lat,
 	nodes_stop_arrivals.lon AS to_lon,
+	nodes_stop_departures.route_color AS route_color,
 	EXTRACT(EPOCH FROM (nodes_stop_arrivals.node_time - nodes_stop_departures.node_time)) AS cost,
 	99999::INTEGER AS reverse_cost
 FROM (
@@ -552,6 +556,7 @@ SELECT
 	nodes_stop_departures.node_time AS to_node_time,
 	nodes_stop_departures.lat AS to_lat,
 	nodes_stop_departures.lon AS to_lon,
+	CAST(NULL AS TEXT) AS route_color,
 	EXTRACT(EPOCH FROM (nodes_stop_departures.node_time - nodes_stop_arrivals.node_time)) AS cost,
 	99999::INTEGER AS reverse_cost
 FROM (
@@ -583,6 +588,7 @@ SELECT
 	nodes_stop_departures.node_time AS to_node_time,
 	nodes_stop_departures.lat AS to_lat,
 	nodes_stop_departures.lon AS to_lon,
+	CAST(NULL AS TEXT) AS route_color,
 	EXTRACT(EPOCH FROM (nodes_stop_departures.node_time - nodes_stop_arrivals.node_time)) AS cost,
 	99999::INTEGER AS reverse_cost
 FROM (
@@ -616,6 +622,7 @@ SELECT
 	nodes_stop_departures.node_time AS to_node_time,
 	nodes_stop_departures.lat AS to_lat,
 	nodes_stop_departures.lon AS to_lon,
+	CAST(NULL AS TEXT) AS route_color,
 	0::INTEGER AS cost,
 	99999::INTEGER AS reverse_cost
 FROM (
@@ -643,6 +650,7 @@ SELECT
 	nodes_exit.node_time AS to_node_time,
 	nodes_exit.lat AS to_lat,
 	nodes_exit.lon AS to_lon,
+	CAST(NULL AS TEXT) AS route_color,
 	0::INTEGER AS cost,
 	99999::INTEGER AS reverse_cost
 FROM (
@@ -794,7 +802,7 @@ SELECT *
 FROM nodes_gtfs
 WHERE  stop_name = 'Midway' AND node_type = 'entry_node'
 ```
-```{sql connection = con}
+```{sql connection = con, output.var = "route"}
 SELECT r.*, edges_gtfs.*
 FROM edges_gtfs
 INNER JOIN (SELECT X.*
@@ -806,20 +814,55 @@ FROM pgr_Dijkstra(
 	) AS X
 ORDER BY seq) r ON edges_gtfs.id = r.edge
 ```
-#Leaflet
 
+```{r}
+route
+```
+#Leaflet
 ```{r}
 library(leaflet)
 ```
 ```{r}
-leaflet() %>% 
+leaflet(route %>% mutate(route_color = str_c('#', route_color), lon = map2(from_lon, to_lon, function(x,y) c(x,y)), lat = map2(from_lat, to_lat, function(xx,yy) c(xx,yy)))) %>% 
   setView(lng = -88, lat = 42, zoom = 9) %>% 
-  addProviderTiles(providers$Stamen.Toner)
+  addProviderTiles(providers$Stamen.Toner) %>% 
+#  addCircles(lng = ~from_lon, lat = ~from_lat, weight = 1, radius = 1, color = ~route_color) %>% 
+  addPolylines(
+    data = route %>% 
+      mutate(
+        route_color = str_c('#', route_color),
+#        lon = map2(from_lon, to_lon, function(x,y) c(x,y)),
+#        lat = map2(from_lat, to_lat, function(x,y) c(x,y))
+        ) %>% 
+      select(seq, route_color, from_lon, to_lon, from_lat, to_lat) %>% 
+      gather('fto','lon', from_lon:to_lon) %>% 
+      gather('fta','lat', from_lat:to_lat) %>% 
+      mutate(fta = str_sub(fta, 1, 2), fto = str_sub(fto, 1, 2)) %>% 
+      filter(fta == fto) %>% 
+      arrange(seq)
+  ,
+    lng = ~lon, lat = ~lat, group=~seq, fillColor = ~route_color)
+```
+```{r}
+route %>% 
+      mutate(
+        route_color = str_c('#', route_color),
+#        lon = map2(from_lon, to_lon, function(x,y) c(x,y)),
+#        lat = map2(from_lat, to_lat, function(x,y) c(x,y))
+        ) %>% 
+      select(seq, route_color, from_lon, to_lon, from_lat, to_lat) %>% 
+      gather('fto','lon', from_lon:to_lon) %>% 
+      gather('fta','lat', from_lat:to_lat) %>% 
+      mutate(fta = str_sub(fta, 1, 2), fto = str_sub(fto, 1, 2)) %>% 
+      filter(fta == fto) %>% arrange(seq)
 ```
 
 
 
 ```{sql connection = con}
+SELECT *
+FROM nodes_gtfs
+LIMIT 10
 ```
 ```{sql connection = con}
 ```
