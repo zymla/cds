@@ -40,19 +40,19 @@ ports
 pwd <- uuid::UUIDgenerate() %>% as.character()
 env <- reticulate::dict('POSTGRES_PASSWORD' = pwd)
 env
-```
 
+```
 ## Start the container
 ```{r}
 pg <- client$containers$run(name = 'pg', image = "starefossen/pgrouting:latest", remove = TRUE, ports = ports, volumes = vols, detach = TRUE, environment = env)
 ```
 
 # Download and extract GTFS data
-```{r eval=FALSE}
+```{r eval=TRUE}
 temp <- tempfile()
 download.file('https://www.transitchicago.com/downloads/sch_data/google_transit.zip', temp)
 ```
-```{r eval=FALSE}
+```{r eval=TRUE}
 unzip(zipfile = temp, exdir = data_folder_path)
 ```
 
@@ -894,3 +894,8 @@ LIMIT 10
 ```
 ```{sql connection = con}
 ```
+
+
+# Chicago additional data
+
+https://datahub.cmap.illinois.gov/dataset/community-data-snapshots-raw-data/resource/8c4e096e-c90c-4bef-9cf1-9028d094296e
