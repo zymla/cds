@@ -111,4 +111,7 @@ st_median_hr %>%
 ```{r}
 st %>% ggplot() + geom_line(aes(hr, N/Nday, group = from_station_id), alpha = .07)
 ```
+```{r}
+st %>% as.tibble() %>% select(-am) %>% spread(hr, N, fill = 0) %>% gather('hr', 'N', `0`:`23`) %>% ggplot() + geom_line(aes(hr, N/Nday, group = from_station_id), alpha = .07)
+```
 
