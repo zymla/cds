@@ -1,0 +1,51 @@
+---
+title: "R Notebook"
+output: html_notebook
+author: "jan.zymla@renault.com"
+date: "2018--"
+---
+
+```{r}
+library(tidyverse)
+library(purrr)
+library(magrittr)
+library(lubridate)
+library(data.table)
+```
+```{r}
+tx <- fread('../../Downloads/Taxi_Trips.csv.download/Taxi_Trips.csv', nrows = 1000000)
+colnames(tx) %<>% str_to_lower() %>% str_replace_all('[^a-z0-9]+', '_')
+```
+
+```{r}
+tx %>% head() %>% as.tibble()
+```
+```{r}
+tx[
+  , 
+  `:=`(
+    date_start = mdy_hms(trip_start_timestamp), 
+    date_end = mdy_hms(trip_end_timestamp),
+    mth = floor_date(mdy_hms(trip_start_timestamp), 'month')
+    ),
+  ]
+tx %>% head() %>% as.tibble()
+```
+
+```{r}
+tx[, .(.N), mth] %>% ggplot() + geom_col(aes(mth, N))
+```
+```{r}
+tx[,.N, .(pickup_centroid_longitude, pickup_centroid_latitude)] %>% ggplot() + geom_point(aes(pickup_centroid_longitude, pickup_centroid_latitude, size = log10(N), alpha = N))
+```
+
+```{r}
+tx[,.N, .(pickup_centroid_longitude, pickup_centroid_latitude, dropoff_centroid_longitude, dropoff_centroid_latitude)] %>% 
+  ggplot() +
+  geom_rect(aes())
+```
+
+```{r}
+
+```
+
