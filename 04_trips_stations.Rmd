@@ -109,6 +109,6 @@ st_median_hr %>%
   geom_point(aes(from_longitude, from_latitude, size = (Nday))) + facet_wrap(~median_hr)
 ```
 ```{r}
-st %>% ggplot() + geom_line(aes(hr, N/Nday, group = from_station_id), alpha = .05)
+st %>% ggplot() + geom_line(aes(hr, N/Nday, group = from_station_id), alpha = .07)
 ```
 
