@@ -65,23 +65,50 @@ tr[
     .(
       from_station_name, from_station_id, from_longitude, from_latitude
     )
-  ][
+  ] -> st
+```
+
+```{r}
+st[
     am == TRUE,
     .(
       pct_am = sum(N)/Nday*100,
       Nday
     ),
     .(from_station_name, from_station_id, from_longitude, from_latitude)
-  ] -> st
-```
-
-```{r}
-st %>% 
+  ] %>% 
   ggplot() +
-  geom_point(aes(from_longitude, from_latitude, size = (Nday), color = pct_am)) 
+  geom_point(aes(from_longitude, from_latitude, size = (Nday), color = pct_am)) + scale_color_gradient2(low = 'green', mid = 'yellow', high = 'red', midpoint = 50)
 
 ```
 ```{r}
+st[
+    ,
+    .(
+      median_hr = median(as.double(hr)),
+      Nday
+    ),
+    .(from_station_name, from_station_id, from_longitude, from_latitude)
+  ] %>% 
+  ggplot() +
+  geom_point(aes(from_longitude, from_latitude, size = (Nday), color = median_hr)) + scale_color_gradient2(low = 'green', mid = 'yellow', high = 'red', midpoint = 15)
+```
+```{r}
+st[
+    ,
+    .(
+      median_hr = round(median(as.double(hr))),
+      Nday
+    ),
+    .(from_station_name, from_station_id, from_longitude, from_latitude)
+  ] %>% as.tibble() -> st_median_hr
 
+st_median_hr %>% 
+  ggplot() +
+  geom_point(data = select(st_median_hr, -median_hr), aes(from_longitude, from_latitude, size = (Nday)), color = 'gray') + 
+  geom_point(aes(from_longitude, from_latitude, size = (Nday))) + facet_wrap(~median_hr)
+```
+```{r}
+st %>% ggplot() + geom_line(aes(hr, N/Nday, group = from_station_id), alpha = .05)
 ```
 
