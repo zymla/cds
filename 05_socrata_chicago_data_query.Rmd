@@ -1,0 +1,28 @@
+---
+title: "05_socrata_chicago_data_query"
+output: html_notebook
+author: "jan.zymla@renault.com"
+date: "2018--"
+---
+
+```{r}
+library(tidyverse)
+library(purrr)
+library(magrittr)
+library(lubridate)
+library(data.table)
+```
+
+```{r}
+library(httr)
+library(jsonlite)
+```
+
+```{r}
+keys <- read_csv('secrets/keys.csv')
+```
+
+```{r}
+
+```
+
