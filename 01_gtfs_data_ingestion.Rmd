@@ -844,17 +844,18 @@ leaflet(route %>% mutate(route_color = str_c('#', route_color), lon = map2(from_
     lng = ~lon, lat = ~lat, group=~seq, fillColor = ~route_color)
 ```
 ```{r}
-route %>% 
-      mutate(
-        route_color = str_c('#', route_color),
-#        lon = map2(from_lon, to_lon, function(x,y) c(x,y)),
-#        lat = map2(from_lat, to_lat, function(x,y) c(x,y))
-        ) %>% 
-      select(seq, route_color, from_lon, to_lon, from_lat, to_lat) %>% 
-      gather('fto','lon', from_lon:to_lon) %>% 
-      gather('fta','lat', from_lat:to_lat) %>% 
-      mutate(fta = str_sub(fta, 1, 2), fto = str_sub(fto, 1, 2)) %>% 
-      filter(fta == fto) %>% arrange(seq)
+route %>%
+  mutate(
+    route_color = str_c("#", route_color),
+    #        lon = map2(from_lon, to_lon, function(x,y) c(x,y)),
+    #        lat = map2(from_lat, to_lat, function(x,y) c(x,y))
+  ) %>%
+  select(seq, route_color, from_lon, to_lon, from_lat, to_lat) %>%
+  gather("fto", "lon", from_lon:to_lo9n) %>%
+  gather("fta", "lat", from_lat:to_lat) %>%
+  mutate(fta = str_sub(fta, 1, 2), fto = str_sub(fto, 1, 2)) %>%
+  filter(fta == fto) %>%
+  arrange(seq)
 ```
 
 
