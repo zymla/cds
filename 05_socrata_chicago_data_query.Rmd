@@ -149,5 +149,43 @@ trips <- fread(content(resp, 'text'))
 fwrite(trips, 'data_raw/trips_2018.csv')
 ```
 
+# `curl`-style
+```{r}
+library(curl)
+```
 
+```{r}
+h <-
+  new_handle(
+    #copypostfields = "moo=moomooo"
+    )
+handle_setheaders(h,
+  "Accept" = "application/csv",
+  "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+)
+handle_setopt(h, .list = list(customrequest = "GET"))
+handle_setform(
+  h,
+  .list = list(
+    `$where`  = 'start_time > "2010-01-01T00:00:00.000"',
+    `$order`  = 'start_time',
+    `$limit`  = '1999999999'
+  )
+)
+```
+
+```{r}
+tmpf <-
+  tempfile(
+    pattern  = 'divvy_trips_',
+    tmpdir  = 'data_raw',
+    fileext = ".csv"
+  )
+tmpf
+```
+
+```{r}
+r <- curl_download(url = "https://data.cityofchicago.org/resource/fg6s-gzvg.csv", handle = h, destfile = tmpf, quiet = FALSE)
+r
+```
 
