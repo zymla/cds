@@ -19,10 +19,135 @@ library(jsonlite)
 ```
 
 ```{r}
-keys <- read_csv('secrets/keys.csv')
+keys <- read_csv("secrets/keys.csv")
+```
+
+
+# Get some data
+# Monthly usage statistics
+```{r}
+resp <- 
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.json',
+    query = 
+      list(
+        `$select` = 'count(bike_id), date_trunc_ym(start_time)',
+        `$group`  = 'date_trunc_ym(start_time)',
+        `$order`  = 'date_trunc_ym_start_time',
+        `$limit`  = 10000
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      )
+    )
+resp$status_code
 ```
 
 ```{r}
-
+mthly_trips <- 
+  content(resp, "text") %>% 
+  fromJSON(flatten = TRUE) %>% 
+  as.tibble() %>% 
+  transmute(
+    trip_count = as.numeric(count_bike_id),
+    ym = as_date(date_trunc_ym_start_time)
+    )
+mthly_trips
 ```
+
+
+
+```{r}
+ggplot(mthly_trips) +
+  geom_col(aes(ym, trip_count))
+```
+# Daily usage stats
+```{r}
+resp <- 
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.json',
+    query = 
+      list(
+        `$select` = 'count(bike_id), date_trunc_ymd(start_time)',
+        `$group`  = 'date_trunc_ymd(start_time)',
+        `$order`  = 'date_trunc_ymd_start_time',
+        `$limit`  = 10000
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      )
+    )
+resp$status_code
+```
+
+```{r}
+mthly_trips <- 
+  content(resp, "text") %>% 
+  fromJSON(flatten = TRUE) %>% 
+  as.tibble() %>% 
+  transmute(
+    trip_count = as.numeric(count_bike_id),
+    ymd = as_date(date_trunc_ymd_start_time)
+    )
+mthly_trips
+```
+
+
+
+```{r}
+ggplot(mthly_trips) +
+  geom_col(aes(ymd, trip_count))
+```
+# Get trip data
+```{r}
+resp <- 
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.csv',
+    query = 
+      list(
+        `$select` = 'count(bike_id)',
+        `$where`  = 'start_time > "2018-01-01T00:00:00.000"'
+#        `$order`  = 'date_trunc_ymd_start_time'#,
+#        `$limit`  = 10000
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      )
+    )
+resp$status_code
+```
+
+```{r}
+content(resp) 
+```
+```{r}
+resp <- 
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.csv',
+    query = 
+      list(
+#        `$where`  = 'start_time > "2018-01-01T00:00:00.000"',
+        `$where`  = 'start_time > "2010-01-01T00:00:00.000"',
+        `$order`  = 'start_time',
+        `$limit`  = 1999999999
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      )
+    )
+resp$status_code
+```
+```{r}
+trips <- fread(content(resp, 'text'))
+```
+
+```{r}
+fwrite(trips, 'data_raw/trips_2018.csv')
+```
+
+
 
