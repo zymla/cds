@@ -102,90 +102,63 @@ ggplot(mthly_trips) +
 ```
 # Get trip data
 ```{r}
-resp <- 
+tmpf <-
+  tempfile(
+    pattern  = paste0('divvy_trips_', now() %>% str_replace_all('[^0-9]+', '_'), '_'),
+    tmpdir  = 'data_raw',
+    fileext = ".csv"
+  )
+tmpf
+```
+```{r}
   httr::GET(
     url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.csv',
     query = 
       list(
-        `$select` = 'count(bike_id)',
-        `$where`  = 'start_time > "2018-01-01T00:00:00.000"'
-#        `$order`  = 'date_trunc_ymd_start_time'#,
-#        `$limit`  = 10000
+        
+        `$where`  = 'start_time > "2010-01-01T00:00:00.000"',
+        `$select`  = 'count(trip_id)',
+        `$limit`  = "1999999999"
       ),
     add_headers(
       "Accept" = "application/json",
       "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
-      )
+      ),
+    #write_disk(tmpf, overwrite = TRUE),
+    progress()
     )
-resp$status_code
 ```
-
+## Download data
 ```{r}
-content(resp) 
-```
-```{r}
-resp <- 
   httr::GET(
     url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.csv',
     query = 
       list(
 #        `$where`  = 'start_time > "2018-01-01T00:00:00.000"',
         `$where`  = 'start_time > "2010-01-01T00:00:00.000"',
-        `$order`  = 'start_time',
-        `$limit`  = 1999999999
+       # `$order`  = 'start_time',
+        `$limit`  = "1999999999"
       ),
     add_headers(
       "Accept" = "application/json",
       "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
-      )
+      ),
+    write_disk(tmpf, overwrite = TRUE),
+    progress()
     )
-resp$status_code
-```
-```{r}
-trips <- fread(content(resp, 'text'))
 ```
 
+## Load data
 ```{r}
-fwrite(trips, 'data_raw/trips_2018.csv')
+trips <- fread(tmpf)
+trips[
+  , 
+  `:=`(
+    start_time = as_datetime(start_time),
+    stop_time = as_datetime(stop_time)
+    ), 
+  ]
+glimpse(trips)
 ```
 
-# `curl`-style
-```{r}
-library(curl)
-```
-
-```{r}
-h <-
-  new_handle(
-    #copypostfields = "moo=moomooo"
-    )
-handle_setheaders(h,
-  "Accept" = "application/csv",
-  "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
-)
-handle_setopt(h, .list = list(customrequest = "GET"))
-handle_setform(
-  h,
-  .list = list(
-    `$where`  = 'start_time > "2010-01-01T00:00:00.000"',
-    `$order`  = 'start_time',
-    `$limit`  = '1999999999'
-  )
-)
-```
-
-```{r}
-tmpf <-
-  tempfile(
-    pattern  = 'divvy_trips_',
-    tmpdir  = 'data_raw',
-    fileext = ".csv"
-  )
-tmpf
-```
-
-```{r}
-r <- curl_download(url = "https://data.cityofchicago.org/resource/fg6s-gzvg.csv", handle = h, destfile = tmpf, quiet = FALSE)
-r
-```
 
