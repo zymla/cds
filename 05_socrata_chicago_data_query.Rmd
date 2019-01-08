@@ -101,15 +101,7 @@ ggplot(mthly_trips) +
   geom_col(aes(ymd, trip_count))
 ```
 # Get trip data
-```{r}
-tmpf <-
-  tempfile(
-    pattern  = paste0('divvy_trips_', now() %>% str_replace_all('[^0-9]+', '_'), '_'),
-    tmpdir  = 'data_raw',
-    fileext = ".csv"
-  )
-tmpf
-```
+
 ```{r}
   httr::GET(
     url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.csv',
@@ -129,28 +121,37 @@ tmpf
     )
 ```
 ## Download data
+### Create data file
+```{r}
+tmpf <-
+  tempfile(
+    pattern  = paste0('divvy_trips_', now() %>% str_replace_all('[^0-9]+', '_'), '_'),
+    tmpdir  = 'data_raw',
+    fileext = ".csv"
+  )
+tmpf
+```
+### Download directly to file
 ```{r}
   httr::GET(
     url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.csv',
     query = 
       list(
-#        `$where`  = 'start_time > "2018-01-01T00:00:00.000"',
-        `$where`  = 'start_time > "2010-01-01T00:00:00.000"',
-       # `$order`  = 'start_time',
+        `$where`  = 'start_time > "2010-01-01T00:00:00.000"  AND stop_time <= "2020-01-01T00:00:00.000"',
         `$limit`  = "1999999999"
       ),
     add_headers(
       "Accept" = "application/json",
       "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
       ),
-    write_disk(tmpf, overwrite = TRUE),
+    write_disk(tmpf, overwrite = FALSE),
     progress()
     )
 ```
 
 ## Load data
 ```{r}
-trips <- fread(tmpf)
+trips <- fread(tmpf, na.strings = c(""))
 trips[
   , 
   `:=`(
