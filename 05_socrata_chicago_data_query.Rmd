@@ -2,7 +2,7 @@
 title: "05_socrata_chicago_data_query"
 output: html_notebook
 author: "jan.zymla@renault.com"
-date: "2018--"
+date: "2019-01-08"
 ---
 
 ```{r}
@@ -162,4 +162,89 @@ trips[
 glimpse(trips)
 ```
 
+# Station data
+### Create data file
+```{r}
+tmpfs <-
+  tempfile(
+    pattern  = paste0('divvy_stations_', now() %>% str_replace_all('[^0-9]+', '_'), '_'),
+    tmpdir  = 'data_raw',
+    fileext = ".csv"
+  )
+tmpfs
+```
+### Download directly to file
+```{r}
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/eq45-8inv.csv',
+    query = 
+      list(
+        `$select` = 'count(record)',
+        `$where`  = 'timestamp > "2010-01-01T00:00:00.000"  AND timestamp <= "2020-01-01T00:00:00.000"',
+        `$limit`  = "1999999999"
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      ),
+  #  write_disk(tmpfs, overwrite = FALSE),
+    progress()
+    )
+```
 
+### Download directly to file
+```{r}
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/eq45-8inv.csv',
+    query = 
+      list(
+        `$select` = 'count(record)',
+        `$where`  = 'timestamp > "2017-03-01T00:00:00.000"  AND timestamp <= "2017-08-01T00:00:00.000"',
+        `$limit`  = "1999999999"
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      ),
+    #write_disk(tmpfs, overwrite = FALSE),
+    progress()
+    )
+```
+```{r}
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/eq45-8inv.csv',
+    query = 
+      list(
+       # `$select` = 'count(record)',
+        `$where`  = 'timestamp > "2017-03-01T00:00:00.000"  AND timestamp <= "2017-08-01T00:00:00.000"', #'timestamp > "2010-01-01T00:00:00.000"  AND timestamp <= "2020-01-01T00:00:00.000"',
+        `$order`  = ':id',
+#        `$offset` = "9999999",
+        `$limit`  = "19999999999"
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      ),
+    write_disk(tmpfs, overwrite = T),
+    progress()
+    )
+```
+
+
+```{r}
+stations <- fread(tmpfs, na.strings = c(""))
+stations[
+  , 
+  `:=`(
+    available_bikes  = as.integer(available_bikes),
+    available_docks  = as.integer(available_docks),
+    docks_in_service = as.integer(docks_in_service),
+    latitude         = as.double(latitude),
+    longitude        = as.double(longitude),
+    percent_full     = as.integer(percent_full),
+    timestamp        = as_datetime(timestamp),
+    total_docks      = as.integer(total_docks)
+    ), 
+  ]
+stations %>% glimpse()
+```
