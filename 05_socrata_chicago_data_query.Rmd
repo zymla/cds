@@ -151,15 +151,7 @@ tmpf
 
 ## Load data
 ```{r}
-trips <- fread(tmpf, na.strings = c(""))
-trips[
-  , 
-  `:=`(
-    start_time = as_datetime(start_time),
-    stop_time = as_datetime(stop_time)
-    ), 
-  ]
-glimpse(trips)
+fread(tmpf, na.strings = c(""), nrows = 10000) %>% glimpse()
 ```
 
 # Station data
@@ -225,26 +217,12 @@ tmpfs
       "Accept" = "application/json",
       "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
       ),
-    write_disk(tmpfs, overwrite = T),
+    write_disk(tmpfs, overwrite = FALSE),
     progress()
     )
 ```
 
 
 ```{r}
-stations <- fread(tmpfs, na.strings = c(""))
-stations[
-  , 
-  `:=`(
-    available_bikes  = as.integer(available_bikes),
-    available_docks  = as.integer(available_docks),
-    docks_in_service = as.integer(docks_in_service),
-    latitude         = as.double(latitude),
-    longitude        = as.double(longitude),
-    percent_full     = as.integer(percent_full),
-    timestamp        = as_datetime(timestamp),
-    total_docks      = as.integer(total_docks)
-    ), 
-  ]
-stations %>% glimpse()
+fread(tmpfs, na.strings = c(""), nrows = 10000) %>% glimpse()
 ```

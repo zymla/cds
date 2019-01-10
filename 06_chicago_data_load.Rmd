@@ -17,7 +17,7 @@ library(data.table)
 
 ## Get relevant filename
 ```{r}
-trips_filename <- list.files('data_raw', pattern = 'divvy_trips_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv') %>% max()
+trips_filename <- list.files('data_raw', pattern = 'divvy_trips_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
 trips_filename
 ```
 
@@ -33,4 +33,27 @@ trips[
   ]
 glimpse(trips)
 ```
+## Get relevant filename
+```{r}
+stations_filename <- list.files('data_raw', pattern = 'divvy_stations_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
+stations_filename
+```
 
+## Read the file and convert types
+```{r}
+stations <- fread(stations_filename, na.strings = c(""))
+stations[
+  , 
+  `:=`(
+    available_bikes  = as.integer(available_bikes),
+    available_docks  = as.integer(available_docks),
+    docks_in_service = as.integer(docks_in_service),
+    latitude         = as.double(latitude),
+    longitude        = as.double(longitude),
+    percent_full     = as.integer(percent_full),
+    timestamp        = as_datetime(timestamp),
+    total_docks      = as.integer(total_docks)
+    ), 
+  ]
+stations %>% glimpse()
+```
