@@ -31,6 +31,7 @@ trips[
     stop_time = as_datetime(stop_time)
     ), 
   ]
+setorder(trips, start_time, bike_id)
 glimpse(trips)
 ```
 ## Get relevant filename
@@ -55,6 +56,7 @@ stations[
     total_docks      = as.integer(total_docks)
     ), 
   ]
+setorder(stations, timestamp, id)
 stations %>% glimpse()
 ```
 
