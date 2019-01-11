@@ -1,0 +1,55 @@
+---
+title: "07_stations_eda"
+output: html_notebook
+author: "jan.zymla@renault.com"
+date: "2019-01-10"
+---
+
+
+
+```{r}
+library(tidyverse)
+library(purrr)
+library(magrittr)
+library(lubridate)
+library(data.table)
+```
+
+
+```{r}
+stations %>% glimpse()
+```
+
+```{r}
+stations[
+    , 
+    .(
+      'max_period' = max(timestamp - lag(timestamp), na.rm = TRUE),
+      'min_period' = min(timestamp - lag(timestamp), na.rm = TRUE)
+      ),
+    .(id, 'd' = as.Date(timestamp) )
+  ][
+    ,
+    .(mi = min(min_period), ma = max(max_period)),
+    d
+  ] %>% 
+  gather('minmax', 'period', mi:ma) %>% 
+  mutate(sampling_period = as.numeric(period)) %>% 
+  ggplot() +
+    geom_point(aes(d, sampling_period, group = minmax, color = minmax), alpha = .1) +
+    scale_y_log10()
+```
+```{r}
+stations[ id < 30
+    , 
+    .(
+      'max_docks' = max(total_docks),
+      'min_docks' = min(total_docks)
+      ),
+    .(id, 'd' = as.Date(timestamp))
+  ] %>% 
+  ggplot() +
+    geom_step(aes(x = d, y = min_docks, group = id, color = as.factor(id))) 
+```
+
+
