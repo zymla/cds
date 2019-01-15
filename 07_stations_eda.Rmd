@@ -39,6 +39,7 @@ stations[
     geom_point(aes(d, sampling_period, group = minmax, color = minmax), alpha = .1) +
     scale_y_log10()
 ```
+## Docks
 ```{r}
 stations[ id < 30
     , 
@@ -52,4 +53,38 @@ stations[ id < 30
     geom_step(aes(x = d, y = min_docks, group = id, color = as.factor(id))) 
 ```
 
+### How prevalent are variations in total_docks numbers?
+```{r}
+stations[
+  ,
+  .(delta_total_docks = total_docks - lag(total_docks)),
+  .(id) #, 'd' = as.Date(timestamp))
+][
+  !is.na(delta_total_docks),
+  .N,
+  .(delta_total_docks)
+][
+  order(-N)
+]
+```
+Not that much!!
+
+### How prevalent are variations in total_docks numbers?
+```{r}
+stations[
+  ,
+  .(delta_dis = docks_in_service - lag(docks_in_service)),
+  .(id) #, 'd' = as.Date(timestamp))
+][
+  !is.na(delta_dis),
+  .N,
+  .(delta_dis)
+][
+  order(-N)
+]
+```
+
+```{r}
+glimpse(stations)
+```
 
