@@ -79,7 +79,7 @@ stations[
   !is.na(delta_dis),
   .N,
   .(delta_dis)
-][
+][ 
   order(-N)
 ]
 ```
