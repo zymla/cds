@@ -69,11 +69,15 @@ stations[
 ```
 Not that much!!
 
-### How prevalent are variations in total_docks numbers?
+
+### How prevalent are stations with docks out of service
 ```{r}
 stations[
   ,
-  .(delta_dis = docks_in_service - lag(docks_in_service)),
+  .(
+    delta_dis = docks_in_service - lag(docks_in_service),
+    max_dis = max(docks_in_service)
+  ),
   .(id) #, 'd' = as.Date(timestamp))
 ][
   !is.na(delta_dis),
@@ -82,6 +86,87 @@ stations[
 ][ 
   order(-N)
 ]
+```
+### How prevalent are stations with docks out of service
+```{r}
+stations[
+  ,
+  .(
+    pct_dis = docks_in_service / total_docks * 100
+  ),
+  .(id, timestamp)
+] %>% 
+  ggplot() +
+    geom_hex(aes(timestamp, pct_dis))
+```
+### How prevalent are variations in avalable_docks numbers?
+```{r}
+stations[
+  ,
+  .(delta_ad = available_docks - lag(available_docks)),
+  .(id) #, 'd' = as.Date(timestamp))
+][
+  !is.na(delta_ad),
+  .N,
+  .(delta_ad)
+][ 
+  order(-N)
+]
+```
+### How prevalent are variations in available_bikes numbers?
+```{r}
+stations[
+  ,
+  .(delta_ab = available_bikes - lag(available_bikes)),
+  .(id) #, 'd' = as.Date(timestamp))
+][
+  !is.na(delta_ab),
+  .N,
+  .(delta_ab)
+][ 
+  order(-N)
+]
+```
+```{r}
+stations[
+  ,
+  .(
+    pct_ab = available_bikes / total_docks * 100
+  ),
+  .(id, timestamp)
+] %>% 
+  ggplot() +
+    geom_hex(aes(timestamp, pct_ab))
+```
+```{r}
+stations[
+  1:1e6
+  ,
+  .(
+    pct_ab = available_bikes / total_docks * 100,
+    wdt = timestamp - floor_date(timestamp, 'week')
+  ),
+  .(id, timestamp)
+] %>% 
+  ggplot() +
+    geom_hex(aes(wdt, pct_ab))
+```
+
+```{r}
+stations[
+  ,
+  .(
+    pct_ab = available_bikes / total_docks * 100
+  ),
+  .(id, timestamp)
+][
+  ,
+  .(
+    
+  ),
+] %>% 
+  ggplot() +
+    geom_hex(aes(timestamp, pct_ab))
 ```
 
 ```{r}
