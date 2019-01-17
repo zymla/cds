@@ -1,0 +1,111 @@
+---
+title: "10_Clustering stations"
+author: "Magda Bolewska"
+date: "17 janvier 2019"
+output: word_document
+---
+
+## Clustering des stations
+Il s'agit d'une première version du clustering des stations (cf. étude 1 du doc "Etat des lieux").
+
+Le clustering est réalisé à partir des données du mardi 04/07/2017.
+
+Etapes à suivre : 
+A priori les stations des différents clusters sont assez mélangées :/
+
+1. Tester des différents nombre de clusters en faisant varier la valeur du paramètre km_cent.
+Est-ce qu'une de partitions peut s'expliquer par la distribution des infrastructures dans la ville ?
+
+2. Si on change le seed ou ajoute l'option nstart, les résultats sont-ils différents ?
+
+Ensuite : pour l'instant le clustering est fait sur 1 jour ouvré, tester sur un dimanche, essayer d'élargir la période et généraliser le code.
+
+## 1 - Importation des données et traitements préliminaires
+```{r}
+rm(stations)
+stations_filename <- list.files('data_raw', pattern = 'divvy_stations_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
+stations_filename
+stations <- fread(stations_filename, na.strings = c(""))
+
+stations[
+  , 
+  `:=`(
+    available_bikes  = as.integer(available_bikes),
+    available_docks  = as.integer(available_docks),
+    docks_in_service = as.integer(docks_in_service),
+    latitude         = as.double(latitude),
+    longitude        = as.double(longitude),
+    percent_full     = as.integer(percent_full),
+    timestamp        = as_datetime(timestamp),
+    total_docks      = as.integer(total_docks)
+  ), 
+  ]
+
+stations[,tx_utilisation := available_bikes/docks_in_service]
+stations[,date := as.Date(timestamp)]
+stations[,heure := format(timestamp, "%T")]
+stations[, weekday := lubridate::wday(timestamp, label=TRUE, abbr = FALSE)]
+stations[, month := lubridate::month(timestamp, label=TRUE, abbr = FALSE)]
+```
+
+## 2 - Choix du jour à traiter et analyse de la qualité de données pour cette date
+Dans un premier temps, on travaille sur les données du mardi 04/07/2017.
+```{r}
+
+# Sélection des stations en service
+stations[date == "2017-07-04" & status=="Not In Service",.N,.(id)] # une seule station est concernée, id = 582
+stations2 <- stations[date == "2017-07-04" & id != 582]
+length(unique(stations2$id)) # 581 stations en service
+
+# Analyse des "timestamps"
+stations2[, .(  'max_period' = max(timestamp - lag(timestamp), na.rm = TRUE),
+                'min_period' = min(timestamp - lag(timestamp), na.rm = TRUE)),.(id)][
+                  ,.(mi = min(min_period), ma = max(max_period)),]
+```
+Après vérification : pour l'ensemble de stations nous disposons des relevés réalisés aux mêmes heures, environ toutes les 10 minutes. Un relevé a été réalisé à 20h50 au lieu de 20h55 qui explique le "mi" et "ma".
+
+## 3 - Transformation de la table
+Format souhaité : une ligne par station avec des taux d'utilisation à des heures (timestamp) différentes en colonnes
+```{r}
+length(unique(stations2$heure)) # 144 
+
+base3 <- stations2[!duplicated(stations2[, id]),.(id)]
+liste_stations <- unique(stations2$id)
+liste_heures <- unique(stations2$heure)
+
+for(iidd in liste_stations){
+  for(h in liste_heures){
+    base3[id==iidd,paste("r",gsub(":","_",h),sep="_") := as.double(stations2[id==iidd & heure==h,.(tx_utilisation)])]
+  }
+}
+head(base3)
+nrow(base3) # 581
+ncol(base3) # 145
+```
+C'est lent et ça fait honte mais ça marche. Il faut trouver une façon pour faire cette manip sans boucles.
+
+## 4 - Clustering avec la méthode K-means
+```{r}
+set.seed(1234)
+km_cent <- 10 # PARAMETRE A FAIRE VARIER
+classifST <- kmeans(base3[,2:ncol(base3)], centers=km_cent) 
+#  rapide, ajouter nstart = 100?
+
+stationsKM <- cbind(base3,classeKM = factor(classifST$cluster))
+stationsKM[,.N, by=.(classeKM)]
+```
+
+## 5 - Ajout des coordonnées géographiques et visualisation
+```{r}
+coor_st <- stations[!duplicated(id),.(id,latitude,longitude)]
+stations_visu <- merge(stationsKM[,.(id,classeKM)],coor_st,by="id")
+
+factpal <- colorFactor(topo.colors(km_cent), stations_visu$classeKM)
+
+m <- leaflet::leaflet(data=stations_visu) %>%
+  addTiles() %>%
+  setView(lng=-87.6297982, lat=41.8781136, zoom=11) %>%
+  addCircleMarkers(~longitude, ~latitude, radius=3, color = ~factpal(classeKM))
+m
+```
+
