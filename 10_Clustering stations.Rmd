@@ -66,7 +66,7 @@ Après vérification : pour l'ensemble de stations nous disposons des relevés r
 
 ## 3 - Transformation de la table
 Format souhaité : une ligne par station avec des taux d'utilisation à des heures (timestamp) différentes en colonnes
-```{r}
+```{r eval=FALSE}
 length(unique(stations2$heure)) # 144 
 
 base3 <- stations2[!duplicated(stations2[, id]),.(id)]
@@ -84,6 +84,11 @@ ncol(base3) # 145
 ```
 C'est lent et ça fait honte mais ça marche. Il faut trouver une façon pour faire cette manip sans boucles.
 
+Voilà la version rapide ;)
+```{r}
+base3 <- stations2[, .(id, heure = paste0('r_', str_replace_all(heure, ':', '_')), tx_utilisation)] %>% dcast(id~heure)
+base3
+```
 ## 4 - Clustering avec la méthode K-means
 ```{r}
 set.seed(1234)
