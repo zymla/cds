@@ -117,5 +117,6 @@ m
 stations2[stations_visu[, .(id, classeKM)], on = 'id'] %>% 
   ggplot() +
     geom_line(aes(x = timestamp, y = tx_utilisation, group = id, color = factpal(classeKM)), alpha = .1) +
+    scale_color_manual(values = factpal(1:5)) +
     facet_wrap(~classeKM)
 ```
