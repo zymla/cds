@@ -54,7 +54,8 @@ Dans un premier temps, on travaille sur les données du mardi 04/07/2017.
 
 # Sélection des stations en service
 stations[date == "2017-07-04" & status=="Not In Service",.N,.(id)] # une seule station est concernée, id = 582
-stations2 <- stations[date == "2017-07-04" & id != 582]
+#stations2 <- stations[date == "2017-06-06" & id != 582]
+stations2 <- stations[weekday == "Tuesday" & id != 582]
 length(unique(stations2$id)) # 581 stations en service
 
 # Analyse des "timestamps"
@@ -86,13 +87,15 @@ C'est lent et ça fait honte mais ça marche. Il faut trouver une façon pour fa
 
 Voilà la version rapide ;)
 ```{r}
-base3 <- stations2[, .(id, heure = paste0('r_', str_replace_all(heure, ':', '_')), tx_utilisation)] %>% dcast(id~heure)
+stations3 <- stations2[, .(tx_utilisation = mean(tx_utilisation, na.rm = TRUE)), .(id, hr = hour(timestamp))][hr > 6 | hr < 3]
+#base3 <- stations2[, .(id, heure = paste0('r_', str_replace_all(heure, ':', '_')), tx_utilisation)] %>% dcast(id~heure)
+base3 <- stations3 %>% dcast(id ~ hr)
 base3
 ```
 ## 4 - Clustering avec la méthode K-means
 ```{r}
 set.seed(1234)
-km_cent <- 5 # PARAMETRE A FAIRE VARIER
+km_cent <- 3 # PARAMETRE A FAIRE VARIER
 classifST <- kmeans(base3[,2:ncol(base3)], centers=km_cent) 
 #  rapide, ajouter nstart = 100?
 
@@ -106,17 +109,31 @@ coor_st <- stations[!duplicated(id),.(id,latitude,longitude)]
 stations_visu <- merge(stationsKM[,.(id,classeKM)],coor_st,by="id")
 
 factpal <- colorFactor(topo.colors(km_cent), stations_visu$classeKM)
+```
 
+```{r}
+#stations2[stations_visu[, .(id, classeKM)], on = 'id'] %>% 
+stations3[stations_visu[, .(id, classeKM)], on = 'id'] %>% 
+  ggplot() +
+    geom_point(aes(x = hr, y = tx_utilisation, group = id, color = classeKM), alpha = .1) +
+    scale_color_manual(values = factpal(1:km_cent)) +
+    facet_wrap(~classeKM)
+```
+
+```{r}
 m <- leaflet::leaflet(data=stations_visu) %>%
   addTiles() %>%
   setView(lng=-87.6297982, lat=41.8781136, zoom=11) %>%
   addCircleMarkers(~longitude, ~latitude, radius=3, color = ~factpal(classeKM))
 m
 ```
+
 ```{r}
-stations2[stations_visu[, .(id, classeKM)], on = 'id'] %>% 
+stations_visu[id != 622] %>% 
   ggplot() +
-    geom_line(aes(x = timestamp, y = tx_utilisation, group = id, color = factpal(classeKM)), alpha = .1) +
-    scale_color_manual(values = factpal(1:5)) +
+    geom_point(data = stations_visu[id != 622, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
+    geom_point(aes(longitude, latitude, color = classeKM)) +
+    scale_color_manual(values = factpal(1:km_cent)) +
     facet_wrap(~classeKM)
 ```
+
