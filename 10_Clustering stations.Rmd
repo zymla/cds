@@ -92,7 +92,7 @@ base3
 ## 4 - Clustering avec la méthode K-means
 ```{r}
 set.seed(1234)
-km_cent <- 10 # PARAMETRE A FAIRE VARIER
+km_cent <- 5 # PARAMETRE A FAIRE VARIER
 classifST <- kmeans(base3[,2:ncol(base3)], centers=km_cent) 
 #  rapide, ajouter nstart = 100?
 
@@ -113,4 +113,9 @@ m <- leaflet::leaflet(data=stations_visu) %>%
   addCircleMarkers(~longitude, ~latitude, radius=3, color = ~factpal(classeKM))
 m
 ```
-
+```{r}
+stations2[stations_visu[, .(id, classeKM)], on = 'id'] %>% 
+  ggplot() +
+    geom_line(aes(x = timestamp, y = tx_utilisation, group = id, color = factpal(classeKM)), alpha = .1) +
+    facet_wrap(~classeKM)
+```
