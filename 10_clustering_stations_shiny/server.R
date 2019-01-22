@@ -13,15 +13,17 @@ library(lubridate)
 library(magrittr)
 library(data.table)
 library(leaflet)
+library(tictoc)
 
 
 # Define server logic required to draw a histogram
-shinyServer(function(input, output) {
+shinyServer(
+    function(input, output) {
     
 #= Load dataset ===========================================================
     stations_filename <- list.files('../data_raw', pattern = 'divvy_stations_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
     print(stations_filename)
-    stations <- fread(stations_filename, na.strings = c(""))
+    stations <- fread(stations_filename, na.strings = c(""))#, nrows = 1E6)
     print("Done loading data file")
     
 #= Convert types of dataset ===========================================================
@@ -71,7 +73,7 @@ shinyServer(function(input, output) {
 #= Select data sample ===========================================================
     stations3 <- 
         stations[
-                weekday == "Tuesday" & id != 582
+                wday_abr == "Tue" & id != 582
             ][
                 , 
                 .(tx_utilisation = mean(tx_utilisation, na.rm = TRUE)), 
@@ -83,10 +85,26 @@ shinyServer(function(input, output) {
     base3 <- stations3 %>% dcast(id ~ hr)
     print("Done pivoting data")
     
+ #   reactiveStationsCluster <- reactive({
+ #       #= kmeans clustering ===========================================================
+ #       #set.seed(1234)
+#        km_cent <- input$nb_clusters # PARAMETRE A FAIRE VARIER
+#        print(paste("Nb_cluster=", km_cent))
+ #       classifST <- kmeans(base3[,2:ncol(base3)], centers = km_cent) 
+ #       #  rapide, ajouter nstart = 100?
+ #       
+ #       stationsKM <- cbind(base3,classeKM = factor(classifST$cluster))
+        
+        # 5 - Ajout des coordonnées géographiques et visualisation
+ #       coor_st <- stations[!duplicated(id), .(id, latitude, longitude)]
+ #       merge(stationsKM[, .(id, classeKM)], coor_st, by = "id") #station_visu
+  #  })
     
+ #   reactiveKmCent <- reactive({
+ #       colorFactor(topo.colors(input$nb_clusters), (reactiveStationsCluster()$classeKM))
+ #   })
     output$latlongclusterPlot <- renderPlot({
-        #= kmeans clustering ===========================================================
-        #set.seed(1234)
+        
         km_cent <- input$nb_clusters # PARAMETRE A FAIRE VARIER
         print(paste("Nb_cluster=", km_cent))
         classifST <- kmeans(base3[,2:ncol(base3)], centers = km_cent) 
@@ -96,8 +114,9 @@ shinyServer(function(input, output) {
         
         # 5 - Ajout des coordonnées géographiques et visualisation
         coor_st <- stations[!duplicated(id), .(id, latitude, longitude)]
-        stations_visu <- merge(stationsKM[, .(id, classeKM)], coor_st, by = "id")
-        factpal <- colorFactor(topo.colors(km_cent), stations_visu$classeKM)
+        stations_visu <- merge(stationsKM[, .(id, classeKM)], coor_st, by = "id") #stations_visu
+        
+        factpal <- colorFactor(topo.colors(input$nb_clusters), stations_visu$classeKM)
         stations_visu[id != 622] %>% 
             ggplot() +
             geom_point(data = stations_visu[id != 622, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
@@ -105,5 +124,12 @@ shinyServer(function(input, output) {
             scale_color_manual(values = factpal(1:km_cent)) +
             facet_wrap(~classeKM)
     })
+ #   output$useratePlot <-({
+ #       stations3[reactiveStationsCluster()[, .(id, classeKM)], on = 'id'] %>% 
+ #           ggplot() +
+ #           geom_point(aes(x = hr, y = tx_utilisation, group = id, color = classeKM), alpha = .1) +
+ #           scale_color_manual(values = factpal(1:reactiveKmCent())) +
+ #           facet_wrap(~classeKM)
+ #   })
 
 })
