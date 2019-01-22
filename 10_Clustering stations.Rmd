@@ -5,6 +5,15 @@ date: "17 janvier 2019"
 output: word_document
 ---
 
+```{r}
+library(tidyverse)
+library(lubridate)
+library(magrittr)
+library(data.table)
+library(leaflet)
+library(tictoc)
+```
+
 ## Clustering des stations
 Il s'agit d'une première version du clustering des stations (cf. étude 1 du doc "Etat des lieux").
 
@@ -23,9 +32,12 @@ Ensuite : pour l'instant le clustering est fait sur 1 jour ouvré, tester sur un
 ## 1 - Importation des données et traitements préliminaires
 ```{r}
 rm(stations)
+tic()
 stations_filename <- list.files('data_raw', pattern = 'divvy_stations_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
 stations_filename
 stations <- fread(stations_filename, na.strings = c(""))
+print(toc())
+tic()
 
 stations[
   , 
@@ -40,12 +52,54 @@ stations[
     total_docks      = as.integer(total_docks)
   ), 
   ]
+print(toc())
+tic()
 
 stations[,tx_utilisation := available_bikes/docks_in_service]
+print(toc())
+tic()
+
 stations[,date := as.Date(timestamp)]
-stations[,heure := format(timestamp, "%T")]
-stations[, weekday := lubridate::wday(timestamp, label=TRUE, abbr = FALSE)]
+print(toc())
+tic()
+
+#stations[,heure := format(timestamp, "%T")]
+stations[,heure := as.ITime(timestamp)]
+print(toc())
+tic()
+
+# lubridate::wday is replaced by data.table::wday and a data.table join for higher performance 
+#stations[, weekday := lubridate::wday(timestamp, label=TRUE, abbr = FALSE)]
+wdays <- 
+  (
+    seq.Date(ymd('2019-01-21'), ymd('2019-01-28'), 'day') %>% as.data.table()
+  )[
+    , 
+    .(
+      wday_n   = data.table::wday(`.`),
+      wday_abr = lubridate::wday(`.`, label = TRUE)
+      ),
+    ][
+      , 
+      .N, 
+      .(wday_n, wday_abr)
+    ][
+      , 
+      .(wday_n, wday_abr)
+    ]
+stations[, `:=`(wday_n = data.table::wday(timestamp))]
+stations <- stations[wdays, on = 'wday_n']
+print(toc())
+tic()
+
 stations[, month := lubridate::month(timestamp, label=TRUE, abbr = FALSE)]
+print(toc())
+```
+```{r}
+seq.Date(ymd('2019-01-21'), ymd('2019-01-28'), 'day') %>% as.data.table() -> a
+
+wdays <- (seq.Date(ymd('2019-01-21'), ymd('2019-01-28'), 'day') %>% as.data.table())[, .(wday_n = data.table::wday(`.`), wday_abr = lubridate::wday(`.`, label = TRUE)),][, .N , .(wday_n, wday_abr)][, .(wday_n, wday_abr)]
+
 ```
 
 ## 2 - Choix du jour à traiter et analyse de la qualité de données pour cette date
