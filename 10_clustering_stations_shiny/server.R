@@ -89,7 +89,7 @@ shinyServer(
  #   reactiveKmCent <- reactive({
  #       colorFactor(topo.colors(input$nb_clusters), (reactiveStationsCluster()$classeKM))
  #   })
-    output$latlongclusterPlot <- renderPlot({
+    recactiveClustering <- reactive({ 
         print(wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat)])
         #= Select data sample ===========================================================
         stations3 <- 
@@ -106,7 +106,7 @@ shinyServer(
         print("Done selecting sample")
         
         #= Format data sample for kmeans ===========================================================
-        base3 <- stations3 %>% dcast(id ~ hr)
+        base3 <- stations3 %>% dcast(id ~ hr) %>% na.omit()
         print("Done pivoting data")
         
         km_cent <- input$nb_clusters # PARAMETRE A FAIRE VARIER
@@ -121,19 +121,34 @@ shinyServer(
         stations_visu <- merge(stationsKM[, .(id, classeKM)], coor_st, by = "id") #stations_visu
         
         factpal <- colorFactor(topo.colors(input$nb_clusters), stations_visu$classeKM)
-        stations_visu[id != 622] %>% 
+        
+        list(
+            stations3 = stations3,
+            base3 = base3,
+            km_cent = km_cent,
+            stations_visu = stations_visu,
+            coor_st = coor_st,
+            factpal = factpal
+            ) 
+    })
+
+    output$latlongclusterPlot <- renderPlot({
+        d <- recactiveClustering()
+        d$stations_visu[id != 622] %>% 
             ggplot() +
-            geom_point(data = stations_visu[id != 622, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
+            geom_point(data = d$stations_visu[id != 622, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
             geom_point(aes(longitude, latitude, color = classeKM)) +
-            scale_color_manual(values = factpal(1:km_cent)) +
+            scale_color_manual(values = d$factpal(1:d$km_cent)) +
             facet_wrap(~classeKM)
     })
- #   output$useratePlot <-({
- #       stations3[reactiveStationsCluster()[, .(id, classeKM)], on = 'id'] %>% 
- #           ggplot() +
- #           geom_point(aes(x = hr, y = tx_utilisation, group = id, color = classeKM), alpha = .1) +
- #           scale_color_manual(values = factpal(1:reactiveKmCent())) +
- #           facet_wrap(~classeKM)
- #   })
+    
+    output$useratePlot <- renderPlot({
+        d <- recactiveClustering()
+        d$stations3[d$stations_visu[, .(id, classeKM)], on = 'id'] %>% 
+            ggplot() +
+            geom_point(aes(x = hr, y = tx_utilisation, group = id, color = classeKM), alpha = .1) +
+            scale_color_manual(values = d$factpal(1:d$km_cent)) +
+            facet_wrap(~classeKM)
+    })
 
 })

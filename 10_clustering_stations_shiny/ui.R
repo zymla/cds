@@ -30,7 +30,7 @@ shinyUI(fluidPage(
             sliderInput("nb_clusters",
                         "Number of clusters:",
                         min = 1,
-                        max = 50,
+                        max = 16,
                         value = 5)
         ),
 
