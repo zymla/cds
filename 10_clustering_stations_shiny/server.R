@@ -19,11 +19,11 @@ library(tictoc)
 # Define server logic required to draw a histogram
 shinyServer(
     function(input, output) {
-    
+
 #= Load dataset ===========================================================
     stations_filename <- list.files('../data_raw', pattern = 'divvy_stations_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
     print(stations_filename)
-    stations <- fread(stations_filename, na.strings = c(""))#, nrows = 1E6)
+    stations <- fread(stations_filename, na.strings = c(""), nrows = 1E6)
     print("Done loading data file")
     
 #= Convert types of dataset ===========================================================
@@ -60,7 +60,7 @@ shinyServer(
                 .N, 
                 .(wday_n, wday_abr)
                 ][
-                    , 
+                    order(wday_n), 
                     .(wday_n, wday_abr)
                     ]
     stations[, `:=`(wday_n = data.table::wday(timestamp))]
@@ -70,21 +70,7 @@ shinyServer(
     stations[, month := lubridate::month(timestamp, label=TRUE, abbr = FALSE)]
     print("Done creating features")
     
-#= Select data sample ===========================================================
-    stations3 <- 
-        stations[
-                wday_abr == "Tue" & id != 582
-            ][
-                , 
-                .(tx_utilisation = mean(tx_utilisation, na.rm = TRUE)), 
-                .(id, hr = hour(timestamp))][hr > 6 | hr < 3
-            ]
-    print("Done selecting sample")
-    
-#= Format data sample for kmeans ===========================================================
-    base3 <- stations3 %>% dcast(id ~ hr)
-    print("Done pivoting data")
-    
+
  #   reactiveStationsCluster <- reactive({
  #       #= kmeans clustering ===========================================================
  #       #set.seed(1234)
@@ -104,6 +90,24 @@ shinyServer(
  #       colorFactor(topo.colors(input$nb_clusters), (reactiveStationsCluster()$classeKM))
  #   })
     output$latlongclusterPlot <- renderPlot({
+        print(wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat)])
+        #= Select data sample ===========================================================
+        stations3 <- 
+            stations[
+                    id != 582
+                ][
+                    wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat), .(wday_abr)],
+                    on = 'wday_abr'
+                ][
+                    , 
+                    .(tx_utilisation = mean(tx_utilisation, na.rm = TRUE)), 
+                    .(id, hr = hour(timestamp))][hr > 6 | hr < 3
+                                                 ]
+        print("Done selecting sample")
+        
+        #= Format data sample for kmeans ===========================================================
+        base3 <- stations3 %>% dcast(id ~ hr)
+        print("Done pivoting data")
         
         km_cent <- input$nb_clusters # PARAMETRE A FAIRE VARIER
         print(paste("Nb_cluster=", km_cent))

@@ -9,6 +9,8 @@
 
 library(shiny)
 
+
+
 # Define UI for application that draws a histogram
 shinyUI(fluidPage(
 
@@ -18,6 +20,13 @@ shinyUI(fluidPage(
     # Sidebar with a slider input for number of bins
     sidebarLayout(
         sidebarPanel(
+            checkboxInput("Mon", "Monday", FALSE),
+            checkboxInput("Tue", "Tueday", TRUE),
+            checkboxInput("Wed", "Wednesday", FALSE),
+            checkboxInput("Thu", "Thursday", FALSE),
+            checkboxInput("Fri", "Friday", FALSE),
+            checkboxInput("Sat", "Saturday", FALSE),
+            checkboxInput("Sun", "Sunday", FALSE),
             sliderInput("nb_clusters",
                         "Number of clusters:",
                         min = 1,
