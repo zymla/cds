@@ -71,24 +71,6 @@ shinyServer(
     print("Done creating features")
     
 
- #   reactiveStationsCluster <- reactive({
- #       #= kmeans clustering ===========================================================
- #       #set.seed(1234)
-#        km_cent <- input$nb_clusters # PARAMETRE A FAIRE VARIER
-#        print(paste("Nb_cluster=", km_cent))
- #       classifST <- kmeans(base3[,2:ncol(base3)], centers = km_cent) 
- #       #  rapide, ajouter nstart = 100?
- #       
- #       stationsKM <- cbind(base3,classeKM = factor(classifST$cluster))
-        
-        # 5 - Ajout des coordonnées géographiques et visualisation
- #       coor_st <- stations[!duplicated(id), .(id, latitude, longitude)]
- #       merge(stationsKM[, .(id, classeKM)], coor_st, by = "id") #station_visu
-  #  })
-    
- #   reactiveKmCent <- reactive({
- #       colorFactor(topo.colors(input$nb_clusters), (reactiveStationsCluster()$classeKM))
- #   })
     recactiveClustering <- reactive({ 
         print(wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat)])
         #= Select data sample ===========================================================
