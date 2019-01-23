@@ -23,7 +23,7 @@ shinyServer(
 #= Load dataset ===========================================================
     stations_filename <- list.files('../data_raw', pattern = 'divvy_stations_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
     print(stations_filename)
-    stations <- fread(stations_filename, na.strings = c(""), nrows = 1E6)
+    stations <- fread(stations_filename, na.strings = c(""))#, nrows = 1E6)
     print("Done loading data file")
     
 #= Convert types of dataset ===========================================================
