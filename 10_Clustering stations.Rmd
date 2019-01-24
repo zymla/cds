@@ -109,7 +109,7 @@ Dans un premier temps, on travaille sur les données du mardi 04/07/2017.
 # Sélection des stations en service
 stations[date == "2017-07-04" & status=="Not In Service",.N,.(id)] # une seule station est concernée, id = 582
 #stations2 <- stations[date == "2017-06-06" & id != 582]
-stations2 <- stations[weekday == "Tuesday" & id != 582]
+stations2 <- stations[wday_abr == "Tue" & id != 582]
 length(unique(stations2$id)) # 581 stations en service
 
 # Analyse des "timestamps"
@@ -142,6 +142,8 @@ C'est lent et ça fait honte mais ça marche. Il faut trouver une façon pour fa
 Voilà la version rapide ;)
 ```{r}
 stations3 <- stations2[, .(tx_utilisation = mean(tx_utilisation, na.rm = TRUE)), .(id, hr = hour(timestamp))][hr > 6 | hr < 3]
+stations3[, `:=`(hr = as.factor(hr) %>% fct_reorder(hr) %>% fct_shift(3))]
+stations3
 #base3 <- stations2[, .(id, heure = paste0('r_', str_replace_all(heure, ':', '_')), tx_utilisation)] %>% dcast(id~heure)
 base3 <- stations3 %>% dcast(id ~ hr)
 base3
@@ -171,7 +173,8 @@ stations3[stations_visu[, .(id, classeKM)], on = 'id'] %>%
   ggplot() +
     geom_point(aes(x = hr, y = tx_utilisation, group = id, color = classeKM), alpha = .1) +
     scale_color_manual(values = factpal(1:km_cent)) +
-    facet_wrap(~classeKM)
+    facet_wrap(~classeKM) +
+    theme(axis.text.x = element_text(angle = 90))
 ```
 
 ```{r}

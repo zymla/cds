@@ -8,6 +8,8 @@
 #
 
 library(shiny)
+library(shinycssloaders)
+
 
 
 
@@ -20,6 +22,7 @@ shinyUI(fluidPage(
     # Sidebar with a slider input for number of bins
     sidebarLayout(
         sidebarPanel(
+            actionButton("recompute", label = "Recompute"),
             checkboxInput("Mon", "Monday", FALSE),
             checkboxInput("Tue", "Tueday", TRUE),
             checkboxInput("Wed", "Wednesday", FALSE),
@@ -31,13 +34,16 @@ shinyUI(fluidPage(
                         "Number of clusters:",
                         min = 1,
                         max = 16,
-                        value = 5)
+                        value = 5),
+            radioButtons("timePlotType", label = 'Hourly plot:', choices = c("line", "point"), selected = "line", inline = TRUE),
+            radioButtons("clusterOn", label = 'Cluster on:', choices = c("use rate", "variation of use rate"), selected = "use rate", inline = FALSE)
         ),
 
         # Show a plot of the generated distribution
         mainPanel(
-            plotOutput("latlongclusterPlot"),
-            plotOutput("useratePlot")
+            withSpinner(plotOutput("latlongclusterPlot")),
+            withSpinner(plotOutput("useratePlot")),
+            withSpinner(plotOutput("duseratePlot"))
         )
     )
 ))
