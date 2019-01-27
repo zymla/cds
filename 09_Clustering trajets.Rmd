@@ -6,32 +6,35 @@ output: word_document
 ---
 
 ## Clustering des trajets
-Travaux réalisés sur le fichier des trajets pour la période 01/03/2017 - 31/07/2017 (idem 08).
+L'objectif de l'étude est de réaliser un clustering de trajets avec des méthodes différentes, comparer les résultats obtenus et identifier la méthode qui donne des résultats les plus pertinents.
 
-L'objectif de l'étude est de réaliser un clustering de trajets. 
 Trois méthodes ont été testées :
- - Méthode basée sur la densité (DBSCAN)
- - Méthode K-means
- - Méthode CAH : ne fonctionne pas compte tenu de la volumétrie de données  
+- Méthode K-means,
+- Méthode basée sur la densité (DBSCAN),
+- Méthode CAH.  
 
-Restitution : un onglet dans l'application shiny permettant de visualiser 
-le clustering obtenu en fonction de la méthode et des paramètres
- -> Affichage de trajets les plus fréquents : sinon illisible
+Conclusions :
+1. La méthode CAH ne fonctionne pas compte tenu de la volumétrie de données.
+2. La méthode K-means permet d'identifier des clusters quelques zones de circulation qui paraissent "raisonnables".
+3. La méthode basée sur la densité (dbscan) donne une grande zone de circulation, difficile à diviser.
 
-Points à voir : est-ce qu'on accorde l'importance à la direction du trajet ?
-Dans l'approche ci-dessous oui (il faudrait dessiner les flèches),
-sinon il faut ajuster le code (peut-être faire les deux options ?)
+Ces observations illustrent les idées reçues en cours : 
+1. CAH pas adaptée pour des grands jeux de données.
+2. En fonction de la méthode de clustering choisie, on peut obtenir des résultats très différents.
+=> A nous de voir ce qui est le plus pertinent.
 
-# Etape 1 : Importation de données et traitements préliminaires
-```{r cars}
+Restitution possible : un onglet dans l'application shiny permettant de visualiser 
+le clustering obtenu en fonction de la méthode et des paramètres souhaités
+-> Affichage de trajets les plus fréquents pour le jour de la semaine et la plage horaire souhaitée
+
+# 1 - Importation de données et traitements préliminaires
+```{r}
 library(data.table)
 library(lubridate)
 library(ggplot2)
 library(leaflet)
 library(geosphere)
 library(dbscan)
-
-## Import
 rm(trips)
 trips_filename <- list.files('data_raw', pattern = 'divvy_trips_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
 trips_filename
@@ -44,11 +47,12 @@ trips[
   ), 
   ]
 
-# Ajout des variables complémentaires
 trips[, weekday := lubridate::wday(start_time, label=TRUE, abbr = FALSE)]
-trips[, month := lubridate::month(start_time, label=TRUE, abbr = FALSE)]
+trips[, hr_depart := hour(start_time)]
+```
 
 # Attribution du nom et des coordonnées géographiques uniques à chaque station
+```{r}
 nc_stations <- trips[!duplicated(trips[, from_station_id]),.(from_station_id,from_station_name,from_latitude,from_longitude) ]
 trips$from_station_name <- NULL
 trips$from_latitude <- NULL
@@ -60,120 +64,193 @@ trips$to_longitude <- NULL
 trips <- merge(trips,nc_stations,by= c("from_station_id"))
 setnames(nc_stations, old = c("from_station_id", "from_station_name","from_latitude","from_longitude"), new = c("to_station_id", "to_station_name","to_latitude","to_longitude"))
 trips <- merge(trips,nc_stations,by= c("to_station_id"))
-
 ```
 
-# 2 - Calcul de la distance de façon simplifiée
+# Assimilation des trajets de la station A à la station B et à l'inverse
 ```{r}
-trips2 <- trips[from_station_id != to_station_id,.(from_station_id, to_station_id, from_latitude,from_longitude,to_latitude,to_longitude)]
-trips2[,from_latitudem := from_latitude*111130]
-trips2[,to_latitudem := to_latitude*111130]
-trips2[,from_longitudem := from_longitude*82717]
-trips2[,to_longitudem := to_longitude*82717]
+trips_1 <- trips[from_latitude < to_latitude & from_station_id != to_station_id, 
+                 .(from_station_id,to_station_id,from_latitude,to_latitude,from_longitude,to_longitude,weekday,hr_depart)]
+trips_2 <- trips[from_latitude > to_latitude & from_station_id != to_station_id, 
+                 .(from_station_id,to_station_id,from_latitude,to_latitude,from_longitude,to_longitude,weekday,hr_depart)]
+
+trips_3 <- trips[from_latitude == to_latitude & from_station_id != to_station_id, ]
+nrow(trips_3) # 0
+```
+
+```{r}
+trips_1[,station1 := from_station_id]
+trips_1[,station2 := to_station_id]
+trips_1[,latitude1 := from_latitude]
+trips_1[,latitude2 := to_latitude]
+trips_1[,longitude1 := from_longitude]
+trips_1[,longitude2 := to_longitude]
+
+trips_2[,station1 := to_station_id]
+trips_2[,station2 := from_station_id]
+trips_2[,latitude1 := to_latitude]
+trips_2[,latitude2 := from_latitude]
+trips_2[,longitude1 := to_longitude]
+trips_2[,longitude2 := from_longitude]
+
+trips2 <- rbind(trips_1,trips_2)
+trips2$to_station_id <- NULL
+trips2$from_station_id <- NULL
+trips2$to_latitude <- NULL
+trips2$from_latitude <- NULL
+trips2$to_longitude <- NULL
+trips2$from_longitude <- NULL
+head(trips2)
+```
+
+## 2 - Calcul de la distance de façon simplifiée pour Chicago
+```{r}
+trips2[,latitude1m := latitude1*111130]
+trips2[,latitude2m := latitude2*111130]
+trips2[,longitude1m := longitude1*82717]
+trips2[,longitude2m := longitude2*82717]
+```
 
 # Vérification du calcul sur un exemple
-# ind <- sample(1:nrow(trips2),1)
-# test <- trips2[ind,]
-# test[,dist1:=abs(from_latitudem-to_latitudem)+abs(from_longitudem-to_longitudem)]
-# test[,dist2:=distHaversine(c(as.double(from_longitude),as.double(from_latitude)),c(as.double(from_longitude),as.double(to_latitude)))+ 
-#       distHaversine(c(as.double(from_longitude),as.double(to_latitude)),c(as.double(to_longitude),as.double(to_latitude)))]
-# test
-# OK
-```
-
-
-# 3 - Clustering des trajets avec une méthode basée sur la densité (algorithme dbscan)
 ```{r}
-## 3 - Clustering des trajets avec une méthode basée sur la densité (algorithme dbscan)
-
-# 3a Clustering
-# nrow(trips2) # 1771679
-tripsdb <- unique(trips2[,Nb_trajets := .N, by=.(from_latitude,from_longitude,to_latitude,to_longitude,from_latitudem,to_latitudem,from_longitudem,to_longitudem)])
-# tripsdb[,valid:=sum(Nb_trajets)] # 1771679
-db_eps <- 1000
-db_minPts <- 10
-classifd <- dbscan(tripsdb[,.(from_latitudem,to_latitudem,from_longitudem,to_longitudem)],eps=db_eps,minPts=db_minPts, weights = tripsdb$Nb_trajets)
-classifd
-classifd_cluster <- as.matrix(classifd$cluster,nrow=length(classifd$cluster),ncol=1)
-tripsdb <- cbind(tripsdb,classifd_cluster)
-
-#3b Visualisation
-trips_dessin <- tripsdb[V1!=0 & Nb_trajets> 300]
-unique(trips_dessin$V1)
-
-# Couleurs html
-# http://www.letoileauxsecrets.fr/couleurs/couleurs-web.html
-
-trips_dessin[,col:="#000000#"] # black
-trips_dessin[V1==1,col:="#0000FF"] # blue 
-trips_dessin[V1==2,col:="#FF0000"] # red
-trips_dessin[V1==32,col:="#008000"] # green
-trips_dessin[V1==104,col:="#FF1493"] # deeppink
-
-m2 <- leaflet(data=trips_dessin) %>%
-  addTiles() %>%
-  setView(lng=-87.6297982, lat=41.8781136, zoom=11)
-  for (i in 1:nrow(trips_dessin)){
-    m2 <- m2 %>%
-      addPolylines(lat=c(trips_dessin[i,]$from_latitude,trips_dessin[i,]$to_latitude),lng=c(trips_dessin[i,]$from_longitude,trips_dessin[i,]$to_longitude),color = trips_dessin[i,]$col,opacity = 1)
-  }
-m2
+ind <- sample(1:nrow(trips2),1)
+test <- trips2[ind,]
+test[,dist1:=abs(latitude1m-latitude2m)+abs(longitude1m-longitude2m)]
+test[,dist2:=distHaversine(c(as.double(longitude1),as.double(latitude1)),c(as.double(longitude1),as.double(latitude2)))+ 
+      distHaversine(c(as.double(longitude1),as.double(latitude2)),c(as.double(longitude2),as.double(latitude2)))]
+ test
 ```
+OK
 
-# 4 - Clustering des trajets avec la méthode K-means
+## 3 - Clustering des trajets avec la méthode K-means
+# 3a - Clustering
 ```{r}
-## 4 - Clustering des trajets avec la méthode K-means
-# 4a - Clustering
 set.seed(1234)
-km_cent <- 10
-classifKM <- kmeans(trips2[,.(from_latitudem,to_latitudem,from_longitudem,to_longitudem)], centers=km_cent) #  rapide, ajouter nstart = 100?
+km_cent <- 5 # PARAMETRE A FAIRE VARIER, 4 ou 5 paraît raisonnable
+classifKM <- kmeans(trips2[,.(latitude1m,latitude2m,longitude1m,longitude2m)], centers=km_cent) 
 trips2.KM <- cbind(trips2,classeKM = factor(classifKM$cluster))
 trips2.KM[,.N, by=.(classeKM)]
+```
 
-# Agrégation
-tripsKM <- unique(trips2.KM[,Nb_trajets := .N, by=.(from_latitude,from_longitude,to_latitude,to_longitude)])
+# 3b - Visualisation
+```{r}
+jour_semaine <- "samedi" # PARAMETRE A FAIRE VARIER
+hr_min <- 0 # PARAMETRE A FAIRE VARIER
+hr_max <- 24 # PARAMETRE A FAIRE VARIER
+# A comparer par exemple les graphiques obtenus pour samedi et jeudi.
 
-# 4b - Visualisation
-trips_dessin <- tripsKM[Nb_trajets> 1000]
-unique(trips_dessin$classeKM)
+# Sans sélection du jour ni de la plage horaire : 
+# tripsKM <- trips2.KM[,.N, by=.(latitude1,longitude1,latitude2,longitude2,classeKM)]
 
-trips_dessin[,col:="#000000#"] # black
+# Avec sélection :
+tripsKM <- trips2.KM[weekday == jour_semaine & hr_depart >= hr_min & hr_depart <= hr_max,.N, by=.(latitude1,longitude1,latitude2,longitude2,classeKM)]
+setorder(tripsKM,-N)
+
+trips_dessin <- tripsKM[,head(.SD,200)]
+
+# affiche des classes pour lesquelles au moins 1 trajet sera dessiné :
+unique(trips_dessin$classeKM) 
+
+```
+
+
+```{r}
+# Couleurs html
+# http://www.letoileauxsecrets.fr/couleurs/couleurs-web.html
 trips_dessin[classeKM==1,col:="#0000FF"] # blue 
 trips_dessin[classeKM==2,col:="#FF0000"] # red
-trips_dessin[classeKM==3,col:= "#808080"] # grey
-trips_dessin[classeKM==6,col:="#9370DB"] # mediumpurple
-trips_dessin[classeKM==8,col:="#800080"] # purple
-trips_dessin[classeKM==10,col:="#556B2F"] #darkolivegreen
-trips_dessin[classeKM==17,col:="#DDA0DD"] #plum
-trips_dessin[classeKM==24,col:="#87CEEB"] # sky blue
-trips_dessin[classeKM==26,col:="#FFA500"] # orange
-trips_dessin[classeKM==28,col:="#1D4851"] # bleu pétrole foncé
-trips_dessin[classeKM==31,col:="#000080"] # navy
-trips_dessin[classeKM==32,col:="#008000"] # green
-trips_dessin[classeKM==33,col:="#FFFF00"] # yellow
-trips_dessin[classeKM==35,col:="#B8860B"] # darkgoldenrod
-trips_dessin[classeKM==36,col:="#8B4513"] # saddlebrown
-trips_dessin[classeKM==104,col:="#FF1493"] # deeppink
+trips_dessin[classeKM==3,col:="#FFFF00"] # yellow
+trips_dessin[classeKM==4,col:="#8B4513"] # saddlebrown
+trips_dessin[classeKM==5,col:="#9370DB"] # mediumpurple
+trips_dessin[classeKM==6,col:= "#808080"] # grey
 
 m2 <- leaflet(data=trips_dessin) %>%
   addTiles() %>%
   setView(lng=-87.6297982, lat=41.8781136, zoom=11)
 for (i in 1:nrow(trips_dessin)){
   m2 <- m2 %>%
-    addPolylines(lat=c(trips_dessin[i,]$from_latitude,trips_dessin[i,]$to_latitude),lng=c(trips_dessin[i,]$from_longitude,trips_dessin[i,]$to_longitude),color = trips_dessin[i,]$col,label = trips_dessin[i,]$classeKM,opacity = 1)
+    addPolylines(lat=c(trips_dessin[i,]$latitude1,trips_dessin[i,]$latitude2),lng=c(trips_dessin[i,]$longitude1,trips_dessin[i,]$longitude2),color = trips_dessin[i,]$col,label = trips_dessin[i,]$classeKM,opacity = 1)
+}
+m2
+
+```
+
+
+## 4 - Clustering des trajets avec la méthode basée sur la densité
+# 4a Clustering
+```{r}
+tripsdb1 <- trips2[,.(latitude1,latitude2,longitude1,longitude2,latitude1m,latitude2m,longitude1m,longitude2m)]
+tripsdb <- unique(tripsdb1[,Nb_trajets := .N, by=.(latitude1,latitude2,longitude1,longitude2,latitude1m,latitude2m,longitude1m,longitude2m)])
+tripsdb[,sum(Nb_trajets)] 
+```
+
+```{r}
+db_eps <- 1700  # PARAMETRE A FAIRE VARIER
+db_minPts <- 1000  # PARAMETRE A FAIRE VARIER
+```
+- Essai 1 : db_eps = 1700, db_minPts = 1000 : zone en bleu trop grande
+- Essai 2 : db_eps = 800, db_minPts = 1000 : zone en bleu toujours trop grande
+- Essai 3 : db_eps = 600, db_minPts = 1000 : la majorité de trajets n'appartient à aucun cluster
+- Essai 4 : db_eps = 600, db_minPts = 600 : la majorité de trajets n'appartient à aucun cluster et la zone bleue est toujours trop grande
+
+```{r}
+classifd <- dbscan(tripsdb[,.(latitude1m,latitude2m,longitude1m,longitude2m)],eps=db_eps,minPts=db_minPts, weights = tripsdb$Nb_trajets)
+classifd
+```
+
+```{r}
+classifd_cluster <- as.matrix(classifd$cluster,nrow=length(classifd$cluster),ncol=1)
+tripsdb$V1 <- NULL
+tripsdb <- cbind(tripsdb,classifd_cluster)
+```
+
+
+# 4b Visualisation
+```{r}
+setorder(tripsdb,-Nb_trajets)
+trips_dessin <- tripsdb[,head(.SD,500)]
+# affichage des clusters pour lesquelles au moins 1 trajet sera dessiné :
+unique(trips_dessin$V1) 
+```
+
+```{r}
+trips_dessin[,col:="#000000#"] # black
+trips_dessin[V1==1,col:="#0000FF"] # blue 
+trips_dessin[V1==2,col:="#FF0000"] # red
+trips_dessin[V1==3,col:="#FFFF00"] # yellow
+trips_dessin[V1==4,col:="#8B4513"] # saddlebrown
+trips_dessin[V1==5,col:="#9370DB"] # mediumpurple
+trips_dessin[V1==6,col:= "#808080"] # grey
+trips_dessin[V1==7,col:="#F4A460"] # sandybrown
+trips_dessin[V1==8,col:="#ADFF2F"] # greenyellow
+trips_dessin[V1==9,col:= "#F0FFFF"] # azure
+
+m2 <- leaflet(data=trips_dessin) %>%
+  addTiles() %>%
+  setView(lng=-87.6297982, lat=41.8781136, zoom=11)
+for (i in 1:nrow(trips_dessin)){
+  m2 <- m2 %>%
+    addPolylines(lat=c(trips_dessin[i,]$latitude1,trips_dessin[i,]$latitude2),lng=c(trips_dessin[i,]$longitude1,trips_dessin[i,]$longitude2),color = trips_dessin[i,]$col,opacity = 1)
 }
 m2
 ```
 
 
-# 4 - Essai avec la méthode CAH (données trop volumineuses)
-```{r}
-## CAH
-library("cluster")
-classif <- agnes(trips2[,.(from_latitudem,to_latitudem,from_longitudem,to_longitudem)],method="ward") 
-# Error: cannot allocate vector of size 11693.1 Gb
+##################################################################################
+##################################################################################
 
-classif <- hclust(dist(trips2[,.(from_latitudem,to_latitudem,from_longitudem,to_longitudem)]), method="ward.D") 
-# Error: cannot allocate vector of size 11693.1 Gb
+## 5 - Clustering des trajets avec la méthode CAH
+```{r}
+library(cluster)
+classif <- agnes(trips2[,.(latitude1m,latitude2m,longitude1m,longitude2m)],method="ward")
+
 ```
+Error: cannot allocate vector of size 11693.1 Gb
+
+Autre façon de faire la CAH :
+```{r}
+classif <- hclust(dist(trips2[,.(latitude1,latitude2,longitude1,longitude2)]), method="ward.D") 
+```
+Error: cannot allocate vector of size 11693.1 Gb
+
+
 
