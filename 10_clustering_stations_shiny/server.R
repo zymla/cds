@@ -102,7 +102,7 @@ shinyServer(function(input, output) {
         
         km_cent <- input$nb_clusters # PARAMETRE A FAIRE VARIER
         print(paste("Nb_cluster=", km_cent))
-        classifST <- kmeans(base3[,2:ncol(base3)], centers = km_cent) 
+        classifST <- kmeans(base3[,2:ncol(base3)], centers = km_cent, algo = input$kmeansAlgo) 
         #  rapide, ajouter nstart = 100?
         
         stationsKM <- cbind(base3,classeKM = factor(classifST$cluster))

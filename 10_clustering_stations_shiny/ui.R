@@ -36,7 +36,13 @@ shinyUI(fluidPage(
                         max = 16,
                         value = 5),
             radioButtons("timePlotType", label = 'Hourly plot:', choices = c("line", "point"), selected = "line", inline = TRUE),
-            radioButtons("clusterOn", label = 'Cluster on:', choices = c("use rate", "variation of use rate"), selected = "use rate", inline = FALSE)
+            radioButtons("clusterOn", label = 'Cluster on:', choices = c("use rate", "variation of use rate"), selected = "use rate", inline = FALSE),
+            radioButtons("kmeansAlgo", label = "k-means algo", choices = c("Hartigan-Wong", "Lloyd", "Forgy", "MacQueen"), select = "Hartigan-Wong"),
+            sliderInput("smoothing",
+                        "Smoothing (hours):",
+                        min = 1,
+                        max = 3,
+                        value = 1)
         ),
 
         # Show a plot of the generated distribution
