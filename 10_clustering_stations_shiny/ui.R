@@ -22,6 +22,7 @@ shinyUI(fluidPage(
     # Sidebar with a slider input for number of bins
     sidebarLayout(
         sidebarPanel(
+            actionButton("flush", label = "Flush data to disk"),
             actionButton("recompute", label = "Recompute"),
             checkboxInput("Mon", "Monday", FALSE),
             checkboxInput("Tue", "Tueday", TRUE),
@@ -34,7 +35,7 @@ shinyUI(fluidPage(
                         "Number of clusters:",
                         min = 1,
                         max = 16,
-                        value = 5),
+                        value = 3),
             radioButtons("timePlotType", label = 'Hourly plot:', choices = c("line", "point"), selected = "line", inline = TRUE),
             radioButtons("clusterOn", label = 'Cluster on:', choices = c("use rate", "variation of use rate"), selected = "use rate", inline = FALSE),
             radioButtons("kmeansAlgo", label = "k-means algo", choices = c("Hartigan-Wong", "Lloyd", "Forgy", "MacQueen"), select = "Hartigan-Wong"),

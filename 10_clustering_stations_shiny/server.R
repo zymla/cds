@@ -23,7 +23,7 @@ library(tictoc)
 #= Load dataset ===========================================================
 stations_filename <- list.files('../data_raw', pattern = 'divvy_stations_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
 print(stations_filename)
-stations <- fread(stations_filename, na.strings = c(""))#, nrows = 1E6)
+stations <- fread(stations_filename, na.strings = c(""), nrows = 1E6)
 print("Done loading data file")
 
 #= Convert types of dataset ===========================================================
@@ -77,7 +77,7 @@ shinyServer(function(input, output) {
         input$recompute
         print(wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat)])
         #= Select data sample ===========================================================
-        stations3 <- 
+        stations_subset <- 
             stations[
                 id != 582
                 ][
@@ -88,15 +88,15 @@ shinyServer(function(input, output) {
                     .(tx_utilisation = mean(tx_utilisation, na.rm = TRUE)), 
                     .(id, hr = hour(timestamp))][hr > 6 | hr < 3
                 ]
-        stations3[, `:=`(hr = as.factor(hr) %>% fct_reorder(hr) %>% fct_shift(3))]
-        stations3[order(hr), `:=`(d_txu = tx_utilisation - lag(tx_utilisation)), id]
+        stations_subset[, `:=`(hr = as.factor(hr) %>% fct_reorder(hr) %>% fct_shift(3))]
+        stations_subset[order(hr), `:=`(d_txu = tx_utilisation - lag(tx_utilisation)), id]
         print("Done selecting sample")
         
         #= Format data sample for kmeans ===========================================================
         if(input$clusterOn == "use rate"){
-            base3 <- stations3[, .(id, hr, tx_utilisation)] %>% dcast(id ~ hr) %>% na.omit()
+            base3 <- stations_subset[, .(id, hr, tx_utilisation)] %>% dcast(id ~ hr) %>% na.omit()
         } else {
-            base3 <- stations3[!is.na(d_txu), .(id, hr, d_txu)] %>% dcast(id ~ hr) %>% na.omit()
+            base3 <- stations_subset[!is.na(d_txu), .(id, hr, d_txu)] %>% dcast(id ~ hr) %>% na.omit()
         }
         print("Done pivoting data")
         
@@ -114,7 +114,7 @@ shinyServer(function(input, output) {
         factpal <- colorFactor(topo.colors(input$nb_clusters), stations_visu$classeKM)
         
         list(
-            stations3 = stations3,
+            stations_subset = stations_subset,
             base3 = base3,
             km_cent = km_cent,
             stations_visu = stations_visu,
@@ -123,30 +123,38 @@ shinyServer(function(input, output) {
         ) 
     })
     
+    observeEvent(input$flush, {
+        d <- recactiveClustering()
+        tmpf <- paste0('data_log_', now() %>% str_replace_all('[^0-9]+', '_'), '.rds')
+        print(tmpf)
+        print(getwd())
+        write_rds(d, path = tmpf)
+    })
+    
     output$latlongclusterPlot <- renderPlot({
         d <- recactiveClustering()
         d$stations_visu[id != 622] %>% 
             ggplot() +
             geom_point(data = d$stations_visu[id != 622, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
             geom_point(aes(longitude, latitude, color = classeKM)) +
-            scale_color_manual(values = d$factpal(1:d$km_cent)) +
+        #    scale_color_manual(values = d$factpal(1:d$km_cent)) +
             facet_wrap(~classeKM)
     })
     
     output$useratePlot <- renderPlot({
         d <- recactiveClustering()
         if(input$timePlotType == 'line'){
-            d$stations3[d$stations_visu[, .(id, classeKM)], on = 'id'] %>% 
+            d$stations_subset[d$stations_visu[, .(id, classeKM)], on = 'id'] %>% 
                 ggplot() +
                 geom_line(aes(x = hr, y = tx_utilisation, group = id, color = classeKM), alpha = .1) +
-                scale_color_manual(values = d$factpal(1:d$km_cent)) +
+             #   scale_color_manual(values = d$factpal(1:d$km_cent)) +
                 facet_wrap(~classeKM) +
                 theme(axis.text.x = element_text(angle = 90))
         } else {
-            d$stations3[d$stations_visu[, .(id, classeKM)], on = 'id'] %>% 
+            d$stations_subset[d$stations_visu[, .(id, classeKM)], on = 'id'] %>% 
                 ggplot() +
                 geom_point(aes(x = hr, y = tx_utilisation, group = id, color = classeKM), alpha = .1) +
-                scale_color_manual(values = d$factpal(1:d$km_cent)) +
+              #  scale_color_manual(values = d$factpal(1:d$km_cent)) +
                 facet_wrap(~classeKM) +
                 theme(axis.text.x = element_text(angle = 90))
         }
@@ -155,17 +163,17 @@ shinyServer(function(input, output) {
     output$duseratePlot <- renderPlot({
         d <- recactiveClustering()
         if(input$timePlotType == 'line'){
-            d$stations3[d$stations_visu[, .(id, classeKM)], on = 'id'][!is.na(d_txu)] %>% 
+            d$stations_subset[d$stations_visu[, .(id, classeKM)], on = 'id'][!is.na(d_txu)] %>% 
                 ggplot() +
                 geom_line(aes(x = hr, y = d_txu, group = id, color = classeKM), alpha = .1) +
-                scale_color_manual(values = d$factpal(1:d$km_cent)) +
+            #    scale_color_manual(values = d$factpal(1:d$km_cent)) +
                 facet_wrap(~classeKM) +
                 theme(axis.text.x = element_text(angle = 90))
         } else {
-            d$stations3[d$stations_visu[, .(id, classeKM)], on = 'id'][!is.na(d_txu)] %>% 
+            d$stations_subset[d$stations_visu[, .(id, classeKM)], on = 'id'][!is.na(d_txu)] %>% 
                 ggplot() +
                 geom_point(aes(x = hr, y = d_txu, group = id, color = classeKM), alpha = .1) +
-                scale_color_manual(values = d$factpal(1:d$km_cent)) +
+             #   scale_color_manual(values = d$factpal(1:d$km_cent)) +
                 facet_wrap(~classeKM) +
                 theme(axis.text.x = element_text(angle = 90))
         }
