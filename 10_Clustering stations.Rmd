@@ -109,7 +109,7 @@ Dans un premier temps, on travaille sur les données du mardi 04/07/2017.
 # Sélection des stations en service
 stations[date == "2017-07-04" & status=="Not In Service",.N,.(id)] # une seule station est concernée, id = 582
 #stations2 <- stations[date == "2017-06-06" & id != 582]
-stations2 <- stations[wday_abr == "Tue" & id != 582]
+stations2 <- stations[wday_n == 3 & id != 582]
 length(unique(stations2$id)) # 581 stations en service
 
 # Analyse des "timestamps"
@@ -192,5 +192,48 @@ stations_visu[id != 622] %>%
     geom_point(aes(longitude, latitude, color = classeKM)) +
     scale_color_manual(values = factpal(1:km_cent)) +
     facet_wrap(~classeKM)
+```
+
+## 6 - Clustering avec la méthode CAH
+```{r}
+set.seed(1234)
+CAH_cent <- 3 # PARAMETRE A FAIRE VARIER
+library(cluster)
+classifST2 <- agnes(base3[,2:ncol(base3)], method="ward") # method : PARAMETRE A FAIRE VARIER
+stationsCAH <- cbind(base3,classeCAH = factor(cutree(classifST2,k=CAH_cent)))
+stationsCAH[,.N, by=.(classeCAH)]
+```
+
+# Ajout des coordonnées géographiques et visualisation
+```{r}
+coor_st <- stations[!duplicated(id),.(id,latitude,longitude)]
+stations_visu <- merge(stationsCAH[,.(id,classeCAH)],coor_st,by="id")
+factpal <- colorFactor(topo.colors(km_cent), stations_visu$classeCAH)
+```
+
+```{r} 
+stations3[stations_visu[, .(id, classeCAH)], on = 'id'] %>% 
+  ggplot() +
+    geom_point(aes(x = hr, y = tx_utilisation, group = id, color = classeCAH), alpha = .1) +
+    scale_color_manual(values = factpal(1:km_cent)) +
+    facet_wrap(~classeCAH) +
+    theme(axis.text.x = element_text(angle = 90))
+```
+
+```{r}
+m <- leaflet::leaflet(data=stations_visu) %>%
+  addTiles() %>%
+  setView(lng=-87.6297982, lat=41.8781136, zoom=11) %>%
+  addCircleMarkers(~longitude, ~latitude, radius=3, color = ~factpal(classeCAH))
+m
+```
+
+```{r}
+stations_visu[id != 622] %>% 
+  ggplot() +
+    geom_point(data = stations_visu[id != 622, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
+    geom_point(aes(longitude, latitude, color = classeCAH)) +
+    scale_color_manual(values = factpal(1:km_cent)) +
+    facet_wrap(~classeCAH)
 ```
 
