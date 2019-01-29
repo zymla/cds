@@ -1,0 +1,86 @@
+---
+title: "11_Clustering stations based on trip data"
+author: "jan.zymla@renault.com"
+date: "2019-01-29"
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(magrittr)
+library(data.table)
+library(leaflet)
+library(tictoc)
+```
+
+
+## 1 - Importation des données et traitements préliminaires
+```{r}
+tic()
+trips_filename <- list.files('data_raw', pattern = 'divvy_trips_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
+trips_filename
+trips <- fread(trips_filename, na.strings = c(""))
+trips[
+  , 
+  `:=`(
+    start_time = as_datetime(start_time),
+    stop_time = as_datetime(stop_time)
+  ), 
+  ]
+
+wdays <- 
+    (
+        seq.Date(ymd('2019-01-21'), ymd('2019-01-28'), 'day') %>% as.data.table()
+    )[
+        , 
+        .(
+            wday_n   = data.table::wday(`.`),
+            wday_abr = lubridate::wday(`.`, label = TRUE)
+        ),
+        ][
+            , 
+            .N, 
+            .(wday_n, wday_abr)
+            ][
+                order(wday_n), 
+                .(wday_n, wday_abr)
+                ]
+trips[, `:=`(wday_n = data.table::wday(start_time))]
+trips <- trips[wdays, on = 'wday_n']
+print(toc())
+#trips[, weekday := lubridate::wday(start_time, label=TRUE, abbr = FALSE)]
+trips[, start_hr := hour(start_time)]
+print(toc())
+tic()
+```
+
+
+# Selection et mise en forme des données de `trips`
+```{r}
+station_trips <- 
+  (trips[
+    from_station_id != to_station_id,
+    .(start_time, stop_time = start_time + trip_duration, from_station_id, to_station_id)
+    ] %>% 
+    { 
+      rbind(
+        .[,.(station_id = from_station_id, timestamp = start_time, type = 'from')],
+        .[,.(station_id = to_station_id, timestamp = stop_time, type = 'to')]
+      )
+    })
+station_trips %>% head()
+```
+```{r}
+station_trips[, .(.N, first_date = min(timestamp), yr = year(min(timestamp))), .(id = station_id)][d$coor_st, on = 'id'] %>% 
+  {
+    ggplot() +
+      geom_point(data = .[,.(longitude, latitude, N)], aes(longitude, latitude, size = log2(N)), colour = 'gray') +
+      geom_point(data = ., aes(longitude, latitude, color = log10(N), size = (N))) +
+      facet_wrap(~yr)
+}
+  
+```
+```{r}
+
+```
+

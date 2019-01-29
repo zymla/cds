@@ -94,18 +94,18 @@ shinyServer(function(input, output) {
         
         #= Format data sample for kmeans ===========================================================
         if(input$clusterOn == "use rate"){
-            base3 <- stations_subset[, .(id, hr, tx_utilisation)] %>% dcast(id ~ hr) %>% na.omit()
+            station_usage_kmeans_input <- stations_subset[, .(id, hr, tx_utilisation)] %>% dcast(id ~ hr) %>% na.omit()
         } else {
-            base3 <- stations_subset[!is.na(d_txu), .(id, hr, d_txu)] %>% dcast(id ~ hr) %>% na.omit()
+            station_usage_kmeans_input <- stations_subset[!is.na(d_txu), .(id, hr, d_txu)] %>% dcast(id ~ hr) %>% na.omit()
         }
         print("Done pivoting data")
         
         km_cent <- input$nb_clusters # PARAMETRE A FAIRE VARIER
         print(paste("Nb_cluster=", km_cent))
-        classifST <- kmeans(base3[,2:ncol(base3)], centers = km_cent, algo = input$kmeansAlgo) 
+        classifST <- kmeans(station_usage_kmeans_input[,2:ncol(station_usage_kmeans_input)], centers = km_cent, algo = input$kmeansAlgo) 
         #  rapide, ajouter nstart = 100?
         
-        stationsKM <- cbind(base3,classeKM = factor(classifST$cluster))
+        stationsKM <- cbind(station_usage_kmeans_input,classeKM = factor(classifST$cluster))
         
         # 5 - Ajout des coordonnées géographiques et visualisation
         coor_st <- stations[!duplicated(id), .(id, latitude, longitude)]
@@ -115,11 +115,12 @@ shinyServer(function(input, output) {
         
         list(
             stations_subset = stations_subset,
-            base3 = base3,
+            station_usage_kmeans_input = station_usage_kmeans_input,
             km_cent = km_cent,
             stations_visu = stations_visu,
             coor_st = coor_st,
-            factpal = factpal
+            factpal = factpal,
+            classifST = classifST
         ) 
     })
     
