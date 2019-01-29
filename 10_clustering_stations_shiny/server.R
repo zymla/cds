@@ -63,7 +63,7 @@ wdays <-
                 order(wday_n), 
                 .(wday_n, wday_abr)
                 ]
-stations[, `:=`(wday_n = data.table::wday(timestamp))]
+stations[, `:=`(wday_n = data.table::wday(timestamp - 4 * 3600))] # Saturday 3:50am shall be considered as Friday late night
 stations <- stations[wdays, on = 'wday_n']
 print(toc())
 tic()

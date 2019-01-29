@@ -78,9 +78,44 @@ station_trips[, .(.N, first_date = min(timestamp), yr = year(min(timestamp))), .
       geom_point(data = ., aes(longitude, latitude, color = log10(N), size = (N))) +
       facet_wrap(~yr)
 }
-  
+   
 ```
 ```{r}
-
+station_movements <-
+  station_trips[, .(hr = hour(timestamp), wday_n = data.table::wday(timestamp - 4 * 3600), station_id, type)][, .N, .(hr, wday_n, station_id, type)]
+station_movements
+```
+```{r}
+station_movements_kmeans_input <- 
+  station_movements[wday_n == 3 & type == 'from', .(hr = as.factor(hr) %>% fct_shift(5), station_id, N)] %>% dcast(station_id ~ hr, fill = 0)
+station_movements_kmeans_input
+```
+```{r}
+classifST <- kmeans(station_movements_kmeans_input[,2:ncol(station_movements_kmeans_input)], centers = 3) 
+classifST
+```
+```{r}
+stationsKM <- cbind(station_movements_kmeans_input, classeKM = factor(classifST$cluster))
+stationsKM
 ```
 
+
+```{r}
+stationsKM[,.(id = station_id, classeKM)][d$coor_st, on = 'id'] %>% 
+  {
+    ggplot() +
+      geom_point(data = .[,.(longitude, latitude)], aes(longitude, latitude), colour = 'gray') +
+      geom_point(data = ., aes(longitude, latitude, color = classeKM)) +
+      facet_wrap(~classeKM)
+}
+```
+We still need to normalize before doing kmeans though....
+```{r}
+station_movements[wday_n == 3 & type == 'from', .(hr = as.factor(hr) %>% fct_shift(5), station_id, N)][stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
+  {
+    ggplot() +
+#geom_point(data = .[,.(longitude, latitude)], aes(longitude, latitude), colour = 'gray') +
+      geom_line(data = ., aes(hr, N, group = station_id, color = classeKM), alpha = .1) +
+      facet_wrap(~classeKM)
+}
+```
