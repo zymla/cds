@@ -87,11 +87,12 @@ station_movements
 ```
 ```{r}
 station_movements_kmeans_input <- 
-  station_movements[wday_n == 3 & type == 'from', .(hr = as.factor(hr) %>% fct_shift(5), station_id, N)] %>% dcast(station_id ~ hr, fill = 0)
-station_movements_kmeans_input
+  station_movements[wday_n == 3 & type == 'from', .(hr = as.factor(hr) %>% fct_shift(5), N, dailyN = sum(N)), station_id][, .(N = N/dailyN, dailyN, station_id, hr)] %>% 
+  dcast(station_id + dailyN ~ hr, fill = 0, value.var = 'N')
+station_movements_kmeans_input[]
 ```
 ```{r}
-classifST <- kmeans(station_movements_kmeans_input[,2:ncol(station_movements_kmeans_input)], centers = 3) 
+classifST <- kmeans(station_movements_kmeans_input[,3:ncol(station_movements_kmeans_input)], centers = 3) 
 classifST
 ```
 ```{r}
@@ -109,9 +110,8 @@ stationsKM[,.(id = station_id, classeKM)][d$coor_st, on = 'id'] %>%
       facet_wrap(~classeKM)
 }
 ```
-We still need to normalize before doing kmeans though....
 ```{r}
-station_movements[wday_n == 3 & type == 'from', .(hr = as.factor(hr) %>% fct_shift(5), station_id, N)][stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
+station_movements[wday_n == 3 & type == 'from', .(hr = as.factor(hr) %>% fct_shift(5), N, dailyN = sum(N)), station_id][, .(N = N/dailyN, dailyN, station_id, hr)][stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
   {
     ggplot() +
 #geom_point(data = .[,.(longitude, latitude)], aes(longitude, latitude), colour = 'gray') +
