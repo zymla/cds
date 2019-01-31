@@ -1,0 +1,185 @@
+---
+title: "1_Stat_des_customers_2017"
+output: html_document
+---
+
+
+
+
+```{r}
+library(data.table)
+library(magrittr)
+```
+
+### Lecture table
+
+
+
+
+```{r}
+# On appelle la table
+trips_ech <- readRDS("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/fichier_anissa/trips_ech.rda")
+
+ech1 <- trips_ech[1234:9345,]
+ech<- ech1[gender == "Female" | gender =="Male",]
+```
+
+### DESCRIPTION DES TRAJETS
+
+```{r}
+# Trajets différents
+ech[,trajet:=paste0("From ",from_station_id, " to ", to_station_id)]
+
+ech[, age:=(2017-birth_year)]
+
+# A FAIRE : Ajouter fitres d'exclusion de trajets
+
+ech[,c("from_station_id","to_station_id","birth_year"):=NULL]
+```
+
+```{r}
+# Combien de trajets différents ?
+ech[,lapply(.SD,function(x) uniqueN(x)),.SDcols=c("trajet")]
+```
+
+```{r}
+# Pour chaque trajet : on calcule le nb de trips et la distribution des durées
+
+setorderv(ech[,list(Nb_trips=.N,moy_duration=mean(trip_duration,na.rm=TRUE), min_duration=min(trip_duration,na.rm=TRUE), Q25_duration=quantile(trip_duration, .25, na.rm=TRUE),Q50_duration=quantile(trip_duration,.50, na.rm=TRUE),Q75_duration=quantile(trip_duration, .75,na.rm=TRUE),max_duration=max(trip_duration,na.rm=TRUE)),by=c("trajet")],c("Nb_trips"),c(-1))[1:100]
+  
+``` 
+```{r}
+setorderv(ech,c("trajet"))
+ech[,nb_trips:=.N,by=c("trajet")]
+ech[,nb_bike:=uniqueN(bike_id),by=c("trajet")]
+ech[,Pct_nb_bike:=round((nb_bike/nb_trips)*100),by=c("trajet")]
+ech[,moy_duration:=mean(trip_duration,na.rm=TRUE),by=c("trajet")]
+#ech[,med_duration:=median(trip_duration,na.rm=TRUE),by=c("trajet")] pb message d'erreur sur format
+
+ech[,c("nb_bike","bike_id","trip_duration"):=NULL]
+
+```
+
+```{r}
+ech[(gender=="Female"),f:=1L,by=c("trajet")]
+ech[(gender=="Male"),f:=0L,by=c("trajet")]
+ech[(gender=="Male"),m:=1L,by=c("trajet")]
+ech[(gender=="Female"),m:=0L,by=c("trajet")]
+ech[,female:=sum(f),by=c("trajet")]
+ech[,male:=sum(m),by=c("trajet")]
+ech[,pct_female:=round((female/nb_trips)*100)]
+ech[,c("f","m","female","male","gender"):=NULL]
+```
+
+```{r}
+ech[,age_moy:=round(mean(age)),by=c("trajet")]
+ech[,age:=NULL]
+```
+
+
+```{r}
+# Description des tranches horaires 
+#   Affiner en fonction du jour de la semaine)
+#   Affiner en fonction de l'utilisation
+
+#tmpfs[min < 16,tr_hor:= "[0-15["][1:2]
+ech[(heure_start >= 0  & heure_start < 7) ,tr_00h06hB:=1L]
+ech[(heure_start >= 7  & heure_start < 9) ,tr_07h08hB:=1L]
+ech[(heure_start >= 9  & heure_start < 12),tr_09h11hB:=1L]
+ech[(heure_start >= 12 & heure_start < 14),tr_12h13hB:=1L]
+ech[(heure_start >= 14 & heure_start < 17),tr_14h16hB:=1L]
+ech[(heure_start >= 17 & heure_start < 19),tr_17h18hB:=1L]
+ech[(heure_start >= 19 & heure_start < 24),tr_19h00hB:=1L]
+ech[is.na(tr_00h06hB),tr_00h06hB:=0L]
+ech[is.na(tr_07h08hB),tr_07h08hB:=0L]
+ech[is.na(tr_09h11hB),tr_09h11hB:=0L]
+ech[is.na(tr_12h13hB),tr_12h13hB:=0L]
+ech[is.na(tr_14h16hB),tr_14h16hB:=0L]
+ech[is.na(tr_17h18hB),tr_17h18hB:=0L]
+ech[is.na(tr_19h00hB),tr_19h00hB:=0L]
+
+ech[,tr_00h06h:=sum(tr_00h06hB),by=c("trajet")]
+ech[,tr_07h08h:=sum(tr_07h08hB),by=c("trajet")]
+ech[,tr_09h11h:=sum(tr_09h11hB),by=c("trajet")]
+ech[,tr_12h13h:=sum(tr_12h13hB),by=c("trajet")]
+ech[,tr_14h16h:=sum(tr_14h16hB),by=c("trajet")]
+ech[,tr_17h18h:=sum(tr_17h18hB),by=c("trajet")]
+ech[,tr_19h00h:=sum(tr_19h00hB),by=c("trajet")]
+
+ech[,Pct_tr_00h06h:=round((tr_00h06h/nb_trips)*100),by=c("trajet")]
+ech[,Pct_tr_07h08h:=round((tr_07h08h/nb_trips)*100),by=c("trajet")]
+ech[,Pct_tr_09h11h:=round((tr_09h11h/nb_trips)*100),by=c("trajet")]
+ech[,Pct_tr_12h13h:=round((tr_12h13h/nb_trips)*100),by=c("trajet")]
+ech[,Pct_tr_14h16h:=round((tr_14h16h/nb_trips)*100),by=c("trajet")]
+ech[,Pct_tr_17h18h:=round((tr_17h18h/nb_trips)*100),by=c("trajet")]
+ech[,Pct_tr_19h00h:=round((tr_19h00h/nb_trips)*100),by=c("trajet")]
+
+ech[,c("tr_00h06hB","tr_07h08hB","tr_09h11hB","tr_12h13hB","tr_14h16hB","tr_17h18hB","tr_19h00hB","tr_00h06h","tr_07h08h","tr_09h11h","tr_12h13h","tr_14h16h","tr_17h18h","tr_19h00h"):=NULL]
+
+```
+
+
+```{r}
+# On drop les variables inutiles
+
+ech[,c("start_time","stop_time","user_type","mois_start","jour_start","heure_start","min_start","sec_start","mois_stop","jour_stop","heure_stop","min_stop","sec_stop","tr_hor_start","tr_hor_stop","horaire_start","horaire_stop"):=NULL]
+ech[,c("trip_id"):=NULL]
+```
+
+
+```{r}
+# On ne garde que les lignes uniques correspond à chaque trajet
+ech_fin <-unique(ech)
+rm(ech)
+```
+
+```{r}
+as.data.table(ech_fin)
+
+```
+
+
+```{r}
+# on réalise une petite ACP
+library(FactoMineR)
+
+res.pca <- PCA(ech_fin[,-c("trajet")],scale.unit = TRUE)
+```
+```{r}
+res.pca
+```
+
+```{r}
+# Coefficient de corrélation entre chaxune des variables et les 4 premières CP
+round(res.pca$var$coord[,1:4],2)
+```
+
+```{r}
+# Décomposition de l'inertie par axe
+round(res.pca$eig,2)
+barplot(res.pca$eig[,1],main="Valeurs propres",names.arg=paste("dim",1:nrow(res.pca$eig)))
+```
+
+```{r}
+# Contribution des trajets à la construction des axes
+#round(res.pca$ind$contrib[,1:2],2)
+```
+
+```{r}
+# Contribution des variables à la contruction des axes
+round(res.pca$var$contrib[,1:4],2)
+```
+
+```{r}
+plot.PCA(res.pca,choix="var")
+plot.PCA(res.pca,choix="ind")
+```
+
+
+
+```{r}
+# Descri^ption des 4 premeirs axes
+dimdesc(res.pca,1:4)
+```
+
+
