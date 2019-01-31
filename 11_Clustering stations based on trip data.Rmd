@@ -86,14 +86,26 @@ station_movements <-
 station_movements
 ```
 ```{r}
-station_movements_kmeans_input <- 
-  station_movements[wday_n == 3 & type == 'from', .(hr = as.factor(hr) %>% fct_shift(5), N, dailyN = sum(N)), station_id][, .(N = N/dailyN, dailyN, station_id, hr)] %>% 
-  dcast(station_id + dailyN ~ hr, fill = 0, value.var = 'N')
-station_movements_kmeans_input[]
+station_movements_subset <- 
+  (
+    station_movements[wday_n == 3] %>%
+    { 
+      rbind(
+        .[type == 'from', .(hr = as.factor(hr) %>% fct_shift(5) %>% fct_relabel(~paste0('f', .)), N = -N), station_id],
+        .[type == 'to',   .(hr = as.factor(hr) %>% fct_shift(5) %>% fct_relabel(~paste0('t', .)), N), station_id]
+      )
+    }
+  )[order(station_id, hr)][, .(hr, N, dailyN = sum(abs(N))), station_id][, .(N = N/dailyN, dailyN, station_id, hr)] 
+station_movements_subset
 ```
 ```{r}
+station_movements_kmeans_input <-
+  station_movements_subset %>% dcast(station_id + dailyN ~ hr, fill = 0, value.var = 'N')
+station_movements_kmeans_input
+```    
+```{r}
 classifST <- kmeans(station_movements_kmeans_input[,3:ncol(station_movements_kmeans_input)], centers = 3) 
-classifST
+#classifST
 ```
 ```{r}
 stationsKM <- cbind(station_movements_kmeans_input, classeKM = factor(classifST$cluster))
@@ -111,11 +123,47 @@ stationsKM[,.(id = station_id, classeKM)][d$coor_st, on = 'id'] %>%
 }
 ```
 ```{r}
-station_movements[wday_n == 3 & type == 'from', .(hr = as.factor(hr) %>% fct_shift(5), N, dailyN = sum(N)), station_id][, .(N = N/dailyN, dailyN, station_id, hr)][stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
+station_movements_subset[stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
   {
     ggplot() +
 #geom_point(data = .[,.(longitude, latitude)], aes(longitude, latitude), colour = 'gray') +
       geom_line(data = ., aes(hr, N, group = station_id, color = classeKM), alpha = .1) +
-      facet_wrap(~classeKM)
-}
+      geom_line(
+        data = classifST$centers %>% melt(value.name = 'N') %>% rename(hr = Var2),
+        aes(hr, N, group = Var1),
+        color = 'black',
+        alpha = .5
+        )+
+      geom_line(
+        data = classifST$centers %>% melt(value.name = 'N') %>% rename(classeKM = Var1, hr = Var2),
+        aes(hr, N, group = classeKM)
+        )+
+      facet_wrap(~classeKM) +
+      ylim(-.2, .2)
+  }
+```
+```{r}
+ggplot() +
+#geom_point(data = .[,.(longitude, latitude)], aes(longitude, latitude), colour = 'gray') +
+  geom_line(
+    data = classifST$centers %>% melt(value.name = 'N') %>% rename(hr = Var2),
+    aes(hr, N, group = Var1),
+    color = 'grey',
+    alpha = .5
+    )+
+  geom_line(
+    data = classifST$centers %>% melt(value.name = 'N') %>% mutate(classeKM = factor(Var1), hr = Var2),
+    aes(hr, N, group = classeKM, color = classeKM)
+    )+
+  facet_wrap(~classeKM)
+
+```
+
+```{r}
+ggplot() +
+  geom_line(
+    data = classifST$centers %>% melt(value.name = 'N') %>% mutate(classeKM = factor(Var1), hr = Var2),
+    aes(hr, N, group = classeKM, color = classeKM)
+  )
+
 ```
