@@ -74,11 +74,11 @@ station_movements <-
     station_trips[
         , 
         .(hr = hour(timestamp), wday_n = data.table::wday(timestamp - 4 * 3600), station_id, type)
-    ][
-        , 
-        .N, 
-        .(hr, wday_n, station_id, type)
-    ][wdays, on = 'wday_n']
+        ][
+            , 
+            .N, 
+            .(hr, wday_n, station_id, type)
+            ][wdays, on = 'wday_n']
 hrtf <-
     union_all(
         tibble(hr = 0:23) %>% 
@@ -109,8 +109,8 @@ shinyServer(function(input, output) {
         station_movements_subset <- 
             (
                 station_movements[
-                        wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat), .(wday_abr)],
-                        on = 'wday_abr'
+                    wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat), .(wday_abr)],
+                    on = 'wday_abr'
                     ][, .(N = sum(N)), .(hr, station_id, type)] %>%
                     { 
                         rbind(
@@ -119,13 +119,14 @@ shinyServer(function(input, output) {
                         )
                     }
             )[hrtf, on = c('hr', 'type')][order(station_id, hrtf)][, .(hr, hrtf, N, dailyN = sum(abs(N))), station_id][, .(N = N/dailyN, dailyN, station_id, hrtf)] 
-
+        
         print("Done selecting sample")
         
         #= Format data sample for kmeans ===========================================================
         station_movements_kmeans_input <-
             station_movements_subset[!is.na(station_id)] %>% dcast(station_id + dailyN ~ hrtf, fill = 0, value.var = 'N')
-
+        station_movements_kmeans_input[, `:=`(dailyN = 1000*(dailyN <= input$low_trips_thd))]
+        
         km_cent <- input$nb_clusters # PARAMETRE A FAIRE VARIER
         classifST <- kmeans(station_movements_kmeans_input[,3:ncol(station_movements_kmeans_input)], centers = km_cent, algorithm = input$kmeansAlgo) 
         stationsKM <- cbind(station_movements_kmeans_input, classeKM = factor(classifST$cluster))

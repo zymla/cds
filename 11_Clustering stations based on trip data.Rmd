@@ -123,10 +123,12 @@ station_movements_subset
 ```{r}
 station_movements_kmeans_input <-
   station_movements_subset[!is.na(station_id)] %>% dcast(station_id + dailyN ~ hrtf, fill = 0, value.var = 'N')
+station_movements_kmeans_input[, `:=`(dailyN = 1000*(dailyN < 500))]
+
 station_movements_kmeans_input
 ```    
 ```{r}
-classifST <- kmeans(station_movements_kmeans_input[,3:ncol(station_movements_kmeans_input)], centers = 9) 
+classifST <- kmeans(station_movements_kmeans_input[,2:ncol(station_movements_kmeans_input)], centers = 9) 
 #classifST
 ```
 ```{r}
