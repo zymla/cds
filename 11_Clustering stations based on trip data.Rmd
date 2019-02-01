@@ -19,12 +19,24 @@ library(tictoc)
 tic()
 trips_filename <- list.files('data_raw', pattern = 'divvy_trips_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
 trips_filename
-trips <- fread(trips_filename, na.strings = c(""))
+trips <- 
+  fread(
+#    nrows = 1e6,
+    trips_filename, 
+    select = c('from_latitude', 'from_longitude', 'from_station_id', 'start_time', 'stop_time', 'to_latitude', 'to_longitude', 'to_station_id'), 
+    na.strings = c("")
+    )
 trips[
   , 
   `:=`(
     start_time = as_datetime(start_time),
-    stop_time = as_datetime(stop_time)
+    stop_time = as_datetime(stop_time),
+    from_longitude = as.numeric(from_longitude),
+    from_latitude = as.numeric(from_latitude),
+    from_station_id = as.integer(from_station_id),
+    to_latitude = as.numeric(to_latitude),
+    to_longitude = as.numeric(to_longitude),
+    to_station_id = as.integer(to_station_id)
   ), 
   ]
 
@@ -60,7 +72,7 @@ tic()
 station_trips <- 
   (trips[
     from_station_id != to_station_id,
-    .(start_time, stop_time = start_time + trip_duration, from_station_id, to_station_id)
+    .(start_time, stop_time, from_station_id, to_station_id)
     ] %>% 
     { 
       rbind(
@@ -68,11 +80,16 @@ station_trips <-
         .[,.(station_id = to_station_id, timestamp = stop_time, type = 'to')]
       )
     })
-station_trips %>% head()
+station_trips %>% head() %>% as_tibble()
 ```
 ```{r}
-coor_st = trips[!is.na(from_longitude) & !is.na(from_latitude), .(latitude = last(from_latitude), longitude = last(from_longitude)), .(id = from_station_id)]
-coor_st
+coor_st <-
+  trips[
+    !is.na(from_longitude) & !is.na(from_latitude), 
+    .(latitude = last(from_latitude), longitude = last(from_longitude)), 
+    .(id = from_station_id)
+  ]
+coor_st %>% as_tibble()
 ```
 
 ```{r}
@@ -87,9 +104,26 @@ station_trips[, .(.N, first_date = min(timestamp), yr = year(min(timestamp))), .
 ```
 ```{r}
 station_movements <-
-  station_trips[, .(hr = hour(timestamp), wday_n = data.table::wday(timestamp - 4 * 3600), station_id, type)][, .N, .(hr, wday_n, station_id, type)]
-station_movements
+  station_trips[
+    , 
+    .(hr = hour(timestamp), wday_n = data.table::wday(timestamp - 4 * 3600), station_id, type)
+  ][
+    , 
+    .N, 
+    .(hr, wday_n, station_id, type)
+  ][
+    coor_st, 
+    on = .(station_id = id), 
+    nomatch = 0
+  ]
+station_movements %>% glimpse()
 ```
+```{r, eval = FALSE}
+write_rds(x = station_movements, 'data_gold/station_movements.rds')
+```
+
+
+
 ```{r}
 #tibble(hr = 0:23) %>% 
  # mutate(hr = as.factor(hr) %>% fct_shift(5)) 
@@ -123,7 +157,7 @@ station_movements_subset <-
       )
     }
   )[hrtf, on = c('hr', 'type')][order(station_id, hrtf)][, .(hr, hrtf, N, dailyN = sum(abs(N))), station_id][, .(N = N/dailyN, dailyN, station_id, hrtf)] 
-station_movements_subset
+station_movements_subset %>% glimpse()
 ```
 ```{r}
 station_movements_kmeans_input <-
@@ -154,8 +188,8 @@ coor_st[stationsKM[,.(id = station_id, classeKM)], on = 'id', ] %>%
 
 
 ```{r}
-#station_movements_subset[hrtf, on = 'hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
-(dst$station_movements_kmeans_input %>% melt('station_id', variable.name = 'hrtf', value.name = 'N'))[hrtf, on='hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
+station_movements_subset[hrtf, on = 'hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
+#(dst$station_movements_kmeans_input %>% melt('station_id', variable.name = 'hrtf', value.name = 'N'))[hrtf, on='hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
   ggplot() +
     geom_line(
       aes(hr, N, group = interaction(station_id, type), color = classeKM), alpha = .1
