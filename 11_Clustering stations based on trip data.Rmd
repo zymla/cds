@@ -115,7 +115,7 @@ hrtf
 ```{r}
 station_movements_subset <- 
   (
-    station_movements[wday_n %in% c(3, 4)][, .(N = sum(N)), .(hr, station_id, type)] %>%
+    station_movements[wday_n %in% c(7)][, .(N = sum(N)), .(hr, station_id, type)] %>%
     { 
       rbind(
         .[type == 'from', .(type, hr, N = -N), station_id],
@@ -143,7 +143,7 @@ stationsKM
 
 
 ```{r}
-stationsKM[,.(id = station_id, classeKM)][coor_st, on = 'id'] %>% 
+coor_st[stationsKM[,.(id = station_id, classeKM)], on = 'id', ] %>% 
   {
     ggplot() +
       geom_point(data = .[,.(longitude, latitude)], aes(longitude, latitude), colour = 'gray') +
@@ -154,7 +154,8 @@ stationsKM[,.(id = station_id, classeKM)][coor_st, on = 'id'] %>%
 
 
 ```{r}
-station_movements_subset[hrtf, on = 'hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
+#station_movements_subset[hrtf, on = 'hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
+(dst$station_movements_kmeans_input %>% melt('station_id', variable.name = 'hrtf', value.name = 'N'))[hrtf, on='hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
   ggplot() +
     geom_line(
       aes(hr, N, group = interaction(station_id, type), color = classeKM), alpha = .1
