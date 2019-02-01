@@ -137,8 +137,6 @@ shinyServer(function(input, output) {
         # 5 - Ajout des coordonnées géographiques et visualisation
         stations_visu <- merge(stationsKM[, .(id = station_id, classeKM)], coor_st, by = "id") #stations_visu
         
-        factpal <- colorFactor(topo.colors(input$nb_clusters), stations_visu$classeKM)
-        
         list(
             station_movements_subset = station_movements_subset,
             station_movements_kmeans_input = station_movements_kmeans_input,
@@ -146,11 +144,10 @@ shinyServer(function(input, output) {
             stations_visu = stations_visu,
             stationsKM = stationsKM,
             coor_st = coor_st,
-            factpal = factpal,
             classifST = classifST
         ) 
     })
-    
+
     observeEvent(input$flush, {
         d <- recactiveClustering()
         tmpf <- paste0('data_log_stations_trips_', now() %>% str_replace_all('[^0-9]+', '_'), '.rds')
@@ -165,19 +162,20 @@ shinyServer(function(input, output) {
             ggplot() +
             geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
             geom_point(aes(longitude, latitude, color = classeKM)) +
-            #    scale_color_manual(values = d$factpal(1:d$km_cent)) +
             facet_wrap(~classeKM)
     })
     
     output$tripratePlot <- renderPlot({
         d <- recactiveClustering()
-        d$station_movements_subset[hrtf, on = 'hrtf'][d$stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
+#        d$station_movements_subset[hrtf, on = 'hrtf'][d$stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
+        (d$station_movements_kmeans_input %>% melt('station_id', variable.name = 'hrtf', value.name = 'N'))[hrtf, on='hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
             ggplot() +
             geom_line(
-                aes(hr, N, group = interaction(station_id, type), color = classeKM), alpha = .1
+                aes(hr, N, group = interaction(station_id, type), color = classeKM),
+                alpha = input$alpha
             ) +
             geom_line(
-                data = d$classifST$centers %>% melt(value.name = 'N') %>% mutate(classeKM = as.factor(Var1), hrtf = Var2)%>% left_join(hrtf %>% as.tibble(), by = 'hrtf'),
+                data = d$classifST$centers %>% melt(value.name = 'N') %>% mutate(classeKM = as.factor(Var1), hrtf = Var2) %>% left_join(hrtf %>% as.tibble(), by = 'hrtf'),
                 aes(hr, N, group = interaction(classeKM, type))
             ) +
             facet_wrap(~classeKM) +
