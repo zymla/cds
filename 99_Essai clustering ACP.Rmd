@@ -1,0 +1,110 @@
+---
+title: "99_Essai clustering ACP"
+author: "Magda Bolewska"
+date: "1 février 2019"
+output: html_document
+---
+
+
+# Sources :
+1/ R pour la statistique et la science des données
+2/ http://factominer.free.fr/factomethods/analyse-en-composantes-principales.html
+3/ http://www.sthda.com/french/articles/38-methodes-des-composantes-principales-dans-r-guide-pratique/73-acp-analyse-en-composantes-principales-avec-r-l-essentiel/
+
+Ma compréhension de la réduction de dimension pour clustering avec ACP.
+Exemple sur les données DECATHLON.
+A noter que les clusters obtenus de façon "traditionnelle" et en utilisant les coordonnées de l'ACP ne sont pas identiques.
+
+
+```{r}
+library(FactoMineR)
+library(cluster)
+data(decathlon)
+```
+
+
+```{r}
+nb_dim <- 5 # PARAMETRE A FAIRE VARIER
+res.pca <- PCA(decathlon[,1:10], scale.unit=TRUE, ncp=nb_dim, graph=T)
+```
+scale.unit: pour choisir de réduire ou non les variables 
+ncp: le nombre de dimensions à garder dans les résultats
+graph: pour choisir de faire apparaître les graphiques ou non
+
+
+```{r}
+summary(res.pca)
+```
+Les deux premières dimensions contiennent 50% de l'inertie totale : 32.719 +  17.371
+
+```{r}
+dimdesc(res.pca, axes=c(1,2))
+```
+
+```{r}
+plot.PCA(res.pca, axes=c(1, 2), choix="ind")
+```
+
+
+```{r}
+decathlon1 <- cbind(decathlon,res.pca$ind$coord)
+head(decathlon1)
+```
+
+
+
+## 2 - Clustering avec la méthode K-means
+
+# Clustering sur les variables d'origine 
+```{r}
+nb_c <- 4 # PARAMETRE A FAIRE VARIER
+set.seed(123)
+kmeans(scale(decathlon[,1:10]), centers=nb_c)
+```
+
+# Clustering sur les coordonnées de projection
+```{r}
+set.seed(123)
+kmeans(decathlon1[,14:18], centers=nb_c)
+```
+
+## 3 - Clustering avec la méthode CAH
+
+# Clustering sur les variables d'origine 
+```{r}
+meth <- "ward" # PARAMETRE A FAIRE VARIER
+class_CAH <- agnes(scale(decathlon[,1:10]),method=meth)
+plot(class_CAH, xlab="Individu",which.plot=2, main="Dendrogram")
+```
+
+```{r}
+class_CAH2 <- as.hclust(class_CAH)
+plot(rev(class_CAH2$height), type="h",ylab="heights")
+```
+
+```{r}
+nb_class_CAH <- 4 # PARAMETRE A FAIRE VARIER
+classes <- cutree(class_CAH, k= nb_class_CAH)
+classes
+```
+
+
+# Clustering sur les coordonnées de projection
+```{r}
+meth <- "ward" # PARAMETRE A FAIRE VARIER
+class_CAH <- agnes(scale(decathlon1[,14:18]),method=meth)
+plot(class_CAH, xlab="Individu",which.plot=2, main="Dendrogram")
+```
+
+```{r}
+class_CAH2 <- as.hclust(class_CAH)
+plot(rev(class_CAH2$height), type="h",ylab="heights")
+```
+
+```{r}
+nb_class_CAH <- 4 # PARAMETRE A FAIRE VARIER
+classes <- cutree(class_CAH, k= nb_class_CAH)
+classes
+```
+
+
