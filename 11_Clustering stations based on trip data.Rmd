@@ -71,7 +71,12 @@ station_trips <-
 station_trips %>% head()
 ```
 ```{r}
-station_trips[, .(.N, first_date = min(timestamp), yr = year(min(timestamp))), .(id = station_id)][d$coor_st, on = 'id'] %>% 
+coor_st = trips[!is.na(from_longitude) & !is.na(from_latitude), .(latitude = last(from_latitude), longitude = last(from_longitude)), .(id = from_station_id)]
+coor_st
+```
+
+```{r}
+station_trips[, .(.N, first_date = min(timestamp), yr = year(min(timestamp))), .(id = station_id)][coor_st, on = 'id'] %>% 
   {
     ggplot() +
       geom_point(data = .[,.(longitude, latitude, N)], aes(longitude, latitude, size = log2(N)), colour = 'gray') +
@@ -128,7 +133,7 @@ station_movements_kmeans_input[, `:=`(dailyN = 1000*(dailyN < 500))]
 station_movements_kmeans_input
 ```    
 ```{r}
-classifST <- kmeans(station_movements_kmeans_input[,2:ncol(station_movements_kmeans_input)], centers = 9) 
+classifST <- kmeans(station_movements_kmeans_input[,2:ncol(station_movements_kmeans_input)], centers = 12) 
 #classifST
 ```
 ```{r}
@@ -138,7 +143,7 @@ stationsKM
 
 
 ```{r}
-stationsKM[,.(id = station_id, classeKM)][d$coor_st, on = 'id'] %>% 
+stationsKM[,.(id = station_id, classeKM)][coor_st, on = 'id'] %>% 
   {
     ggplot() +
       geom_point(data = .[,.(longitude, latitude)], aes(longitude, latitude), colour = 'gray') +
@@ -146,14 +151,16 @@ stationsKM[,.(id = station_id, classeKM)][d$coor_st, on = 'id'] %>%
       facet_wrap(~classeKM)
 }
 ```
+
+
 ```{r}
-station_movements_subset[hrtf, on = 'hrtf'][stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
+station_movements_subset[hrtf, on = 'hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
   ggplot() +
     geom_line(
       aes(hr, N, group = interaction(station_id, type), color = classeKM), alpha = .1
     ) +
     geom_line(
-      data = classifST$centers %>% melt(value.name = 'N') %>% rename(classeKM = Var1, hrtf = Var2)%>% left_join(hrtf %>% as.tibble(), by = 'hrtf'),
+      data = classifST$centers %>% melt(value.name = 'N') %>% mutate(classeKM = as.factor(Var1), hrtf = Var2)%>% left_join(hrtf %>% as.tibble(), by = 'hrtf'),
       aes(hr, N, group = interaction(classeKM, type))
     ) +
     facet_wrap(~classeKM)  +ylim(-.2, .2)
