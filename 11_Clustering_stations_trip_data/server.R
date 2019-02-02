@@ -215,7 +215,11 @@ shinyServer(function(input, output) {
                 alpha = input$alpha
             ) +
             geom_line(
-                data = d$classifST$centers %>% melt(value.name = 'N') %>% mutate(classeKM = as.factor(Var1), hrtf = Var2) %>% left_join(hrtf %>% as.tibble(), by = 'hrtf'),
+                data = 
+                  d$classifST$centers %>% 
+                    melt(value.name = 'N') %>% 
+                    mutate(classeKM = as.factor(Var1), hrtf = Var2) %>% 
+                    left_join(hrtf %>% as.tibble(), by = 'hrtf'),
                 aes(hr, N, group = interaction(classeKM, type))
             ) +
             facet_wrap(~classeKM) +
