@@ -52,7 +52,9 @@ shinyUI(fluidPage(
         # Show a plot of the generated distribution
         mainPanel(
             withSpinner(plotOutput("latlongclusterPlot")),
-            withSpinner(plotOutput("tripratePlot"))
+            withSpinner(plotOutput("tripratePlot")),
+            withSpinner(plotOutput("triprateclustermeansPlot")),
+            withSpinner(plotOutput("tripdailynPlot"))
         )
     )
 ))

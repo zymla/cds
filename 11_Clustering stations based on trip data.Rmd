@@ -200,3 +200,18 @@ station_movements_subset[hrtf, on = 'hrtf'][stationsKM[,.(station_id, classeKM =
     ) +
     facet_wrap(~classeKM)  +ylim(-.2, .2)
 ```
+```{r}
+station_movements_subset[hrtf, on = 'hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
+#(dst$station_movements_kmeans_input %>% melt('station_id', variable.name = 'hrtf', value.name = 'N'))[hrtf, on='hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
+  ggplot() +
+    geom_line(
+      aes(hr, N, group = interaction(station_id, type), color = classeKM), alpha = .1
+    ) +
+    geom_line(
+      data = classifST$centers %>% melt(value.name = 'N') %>% mutate(classeKM = as.factor(Var1), hrtf = Var2)%>% left_join(hrtf %>% as.tibble(), by = 'hrtf'),
+      aes(hr, N, group = interaction(classeKM, type))
+    ) +
+    facet_wrap(~classeKM)  +ylim(-.2, .2)
+
+```
+

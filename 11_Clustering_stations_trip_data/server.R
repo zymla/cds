@@ -40,8 +40,8 @@ wdays <-
         .(wday_n, wday_abr)
         ]
 
-if(length(list.files('../data_gold', pattern = 'station_movements.rds'))){
-  station_movements <- read_rds('../data_gold/station_movements.rds')
+if(length(list.files('.', pattern = 'station_movements.rds'))){
+  station_movements <- read_rds('./station_movements.rds')
 } else {
   trips_filename <- list.files('../data_raw', pattern = 'divvy_trips_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
   print(trips_filename)
@@ -73,7 +73,7 @@ if(length(list.files('../data_gold', pattern = 'station_movements.rds'))){
   station_trips <- 
       (trips[
           from_station_id != to_station_id,
-          .(start_time, stop_time = start_time + trip_duration, from_station_id, to_station_id)
+          .(start_time, stop_time, from_station_id, to_station_id)
           ] %>% 
            { 
                rbind(
@@ -81,16 +81,27 @@ if(length(list.files('../data_gold', pattern = 'station_movements.rds'))){
                    .[,.(station_id = to_station_id, timestamp = stop_time, type = 'to')]
                )
            })
+  coor_st <-
+    trips[
+      !is.na(from_longitude) & !is.na(from_latitude), 
+      .(latitude = last(from_latitude), longitude = last(from_longitude)), 
+      .(id = from_station_id)
+      ]
   
   station_movements <-
       station_trips[
           , 
           .(hr = hour(timestamp), wday_n = data.table::wday(timestamp - night_thd * 3600), station_id, type)
-          ][
-              , 
-              .N, 
-              .(hr, wday_n, station_id, type)
-              ]
+        ][
+          , 
+          .N, 
+          .(hr, wday_n, station_id, type)
+        ][
+          coor_st, 
+          on = .(station_id = id), 
+          nomatch = 0
+        ]
+  write_rds(x = station_movements, path = './station_movements.rds')
 }
 
 station_movements <- station_movements[wdays, on = 'wday_n']
@@ -128,12 +139,12 @@ shinyServer(function(input, output) {
     station_movements_subset <- 
       (
         station_movements[
-#          wdays[c(1), .(wday_abr)],
           wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat), .(wday_abr)],
+#          wdays[c(1), .(wday_abr)],
           on = 'wday_abr'
         ][
           , 
-          .(N = sum(N)), 
+          .(N = sum(N, na.rm = TRUE)), 
           .(hr, station_id, type)
         ] %>%
           { 
@@ -150,7 +161,7 @@ shinyServer(function(input, output) {
         order(station_id, hrtf)
       ][
         , 
-        .(hr, hrtf, N, dailyN = sum(abs(N))), 
+        .(hr, hrtf, N, dailyN = sum(abs(N), na.rm = TRUE)), 
         station_id
       ][
         , 
@@ -159,17 +170,21 @@ shinyServer(function(input, output) {
     
     station_movements_subset <- station_movements_subset[stid_hrtf, on = c('hrtf', 'station_id'), ]
     station_movements_subset[is.na(N), N := 0]
+    st_dn <- station_movements_subset[, .(dailyN = min(dailyN, na.rm = TRUE)), station_id]
+    st_dn[is.infinite(dailyN), dailyN := 0]
     station_movements_subset <-
-      station_movements_subset[, .(N, station_id, hrtf)][station_movements_subset[, .(dailyN = first(dailyN)), station_id], on = 'station_id', all = TRUE]
+      station_movements_subset[, .(N, station_id, hrtf)][, .(N, station_id, hrtf)][st_dn, on = 'station_id', all = TRUE]
     print("Done selecting sample")
       
     #= Format data sample for kmeans ===========================================================
     station_movements_kmeans_input <-
       station_movements_subset[!is.na(station_id)] %>% dcast(station_id + dailyN ~ hrtf, fill = 0, value.var = 'N')
     station_movements_kmeans_input[, `:=`(dailyN = 1000*(dailyN <= input$low_trips_thd))]
+#    station_movements_kmeans_input[, `:=`(dailyN = 1000*(dailyN <= 1000))]
+   # station_movements_kmeans_input %<>% na.omit()
     
     km_cent <- input$nb_clusters # PARAMETRE A FAIRE VARIER
-    classifST <- kmeans(station_movements_kmeans_input[,3:ncol(station_movements_kmeans_input)], centers = km_cent, algorithm = input$kmeansAlgo) 
+    classifST <- kmeans(station_movements_kmeans_input[, 2:ncol(station_movements_kmeans_input)], centers = km_cent, algorithm = input$kmeansAlgo) 
     stationsKM <- cbind(station_movements_kmeans_input, classeKM = factor(classifST$cluster))
     print(paste("Nb_cluster=", km_cent))
     
@@ -198,10 +213,10 @@ shinyServer(function(input, output) {
     
     output$latlongclusterPlot <- renderPlot({
         d <- recactiveClustering()
-        d$stations_visu %>% 
+        d$stations_visu[st_dn[, .(dailyNlog10 = as.integer(log10(pmax(1, dailyN, na.rm = TRUE))), id = station_id)], on = 'id'] %>% 
             ggplot() +
-            geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
-            geom_point(aes(longitude, latitude, color = classeKM)) +
+            geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'white') +
+            geom_point(aes(longitude, latitude, color = classeKM, alpha = dailyNlog10)) +
             facet_wrap(~classeKM)
     })
     
@@ -224,8 +239,36 @@ shinyServer(function(input, output) {
             ) +
             facet_wrap(~classeKM) +
             # Scale to 5-23 0-4. as.numeric(hr) return 1 (not 0) for the first hour (i.e. night_thd)
-            scale_x_continuous(labels = function(x) { (x + night_thd - 1) %% 24 }) +
+            scale_x_continuous(labels = function(x) { (x + night_thd - 1) %% 24 } ) +
+            labs(x = 'hour', y = 'pct of daily a/d (+ arrival, - departures)') +
             ylim(-.2, .2)
     })
 
+    output$triprateclustermeansPlot <- renderPlot({
+      d <- recactiveClustering()
+      d$classifST$centers %>% 
+        melt(value.name = 'N') %>% 
+        mutate(classeKM = as.factor(Var1), hrtf = Var2) %>% 
+        left_join(hrtf %>% as.tibble(), by = 'hrtf') %>%
+        left_join(stationsKM[,.(station_id, classeKM)][st_dn, on = 'station_id'][, .(sum_dn = sum(dailyN)), classeKM], on = 'classeKM') %>% 
+      ggplot(aes(as.numeric(hr), N)) +
+        geom_line(
+          aes(group = interaction(classeKM, type), color = classeKM, alpha = log10(sum_dn))
+        ) +
+        # Scale to 5-23 0-4. as.numeric(hr) return 1 (not 0) for the first hour (i.e. night_thd)
+        scale_x_continuous(labels = function(x) { (x + night_thd - 1) %% 24 } ) +
+        labs(x = 'hour', y = 'pct of daily a/d (+ arrival, - departures)') +
+        ylim(-.2, .2)
+    })
+
+    output$tripdailynPlot <- renderPlot({
+      d <- recactiveClustering()
+      d$stations_visu[st_dn[, .(dailyNlog10 = as.integer(log10(dailyN)), id = station_id)], on = 'id'] %>% 
+        ggplot() +
+        geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
+        geom_point(aes(longitude, latitude, color = classeKM)) +
+        facet_wrap(~dailyNlog10)
+    })
+    
+    
 })
