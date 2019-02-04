@@ -19,7 +19,7 @@ library(tictoc)
 ## We load data outside of shinyServer function, so as it is loaded only once
 ## for all concurrent users of the server
 
-
+night_thd = 5
 #= Load dataset ===========================================================
 tic()
 wdays <- 
@@ -85,7 +85,7 @@ if(length(list.files('../data_gold', pattern = 'station_movements.rds'))){
   station_movements <-
       station_trips[
           , 
-          .(hr = hour(timestamp), wday_n = data.table::wday(timestamp - 4 * 3600), station_id, type)
+          .(hr = hour(timestamp), wday_n = data.table::wday(timestamp - night_thd * 3600), station_id, type)
           ][
               , 
               .N, 
@@ -99,11 +99,11 @@ coor_st <- station_movements[, .(longitude = last(longitude), latitude = last(la
 hrtf <-
     union_all(
         tibble(hr = 0:23) %>% 
-            mutate(hr = as.factor(hr) %>% fct_shift(5)) %>% 
+            mutate(hr = as.factor(hr) %>% fct_shift(night_thd)) %>% 
             mutate(type = 'from', hrtf = fct_relabel(hr, ~paste0('f', .))), #%>% 
         #        mutate(hrtf = fct_reorder(hrtf, as.integer(hr))),
         tibble(hr = 0:23) %>% 
-            mutate(hr = as.factor(hr) %>% fct_shift(5)) %>%
+            mutate(hr = as.factor(hr) %>% fct_shift(night_thd)) %>%
             mutate(type = 'to',   hrtf = fct_relabel(hr, ~paste0('t', .))) #%>% 
         #        mutate(hrtf = fct_reorder(hrtf, as.integer(hr)))
     ) %>%
@@ -209,9 +209,9 @@ shinyServer(function(input, output) {
         d <- recactiveClustering()
         d$station_movements_subset[hrtf, on = 'hrtf'][d$stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
 #        (d$station_movements_kmeans_input %>% melt('station_id', variable.name = 'hrtf', value.name = 'N'))[hrtf, on='hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
-            ggplot() +
+            ggplot(aes(as.numeric(hr), N)) +
             geom_line(
-                aes(hr, N, group = interaction(station_id, type), color = classeKM),
+                aes(group = interaction(station_id, type), color = classeKM),
                 alpha = input$alpha
             ) +
             geom_line(
@@ -220,9 +220,11 @@ shinyServer(function(input, output) {
                     melt(value.name = 'N') %>% 
                     mutate(classeKM = as.factor(Var1), hrtf = Var2) %>% 
                     left_join(hrtf %>% as.tibble(), by = 'hrtf'),
-                aes(hr, N, group = interaction(classeKM, type))
+                aes(group = interaction(classeKM, type))
             ) +
             facet_wrap(~classeKM) +
+            # Scale to 5-23 0-4. as.numeric(hr) return 1 (not 0) for the first hour (i.e. night_thd)
+            scale_x_continuous(labels = function(x) { (x + night_thd - 1) %% 24 }) +
             ylim(-.2, .2)
     })
 
