@@ -1,0 +1,383 @@
+---
+title: "Construction de la base de travail des trips des customers"
+output:
+  html_document:
+    df_print: paged
+date: "17.01.2019"
+---
+
+
+```{r}
+#install.packages("chron")
+
+library(data.table)
+library(tictoc)
+library(lubridate)
+library(leaflet)
+```
+
+#### Importation du fichier des TRIPS 
+
+```{r}
+trips <- fread("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/data_raw/divvy_trips_2019_01_17_17_03_48_9e852e2640a.csv")
+```
+```{r}
+class(trips)
+```
+
+```{r}
+dim(trips)
+```
+
+```{r}
+str(trips)
+```
+
+```{r}
+colnames(trips)
+```
+
+```{r}
+  # On passe en format date
+trips[,`:=`(start_time = as_datetime(start_time),stop_time = as_datetime(stop_time))] 
+```
+
+### Première sélection des trips qui nous intéressent
+#### Ceux des Suscribers
+#### Ceux correspondant à la même temporalité que le fichier des stations (mars a juillet)
+
+```{r}
+trips_suscrib <- trips[year(start_time)==2017 & (month(start_time)>2 & month(start_time)<8) & user_type=="Subscriber",]
+
+rm(trips)
+```
+
+#### Exclusion des valeurs manquantes sur l'âge et le sexe
+```{r}
+  # Avant avec NA
+table(trips_suscrib[,gender],useNA = "ifany")
+summary(trips_suscrib[,birth_year],useNA = "ifany")
+
+trips_suscrib <- trips_suscrib[!(gender==""),]
+trips_suscrib <- trips_suscrib[!(birth_year=="NA"),]
+
+  # Après sans NA
+table(trips_suscrib[,gender],useNA = "ifany")
+summary(trips_suscrib[,birth_year],useNA = "ifany")
+```
+
+
+### Création de quelques variables d'intérêt
+
+```{r}
+  # Trajets
+trips_suscrib[,trajet_id:=paste0("From ",from_station_id, " to ", to_station_id)]
+trips_suscrib[,trajet_name:=paste0("From ",from_station_name, " to ", to_station_name)]
+
+  # Age des suscribers
+trips_suscrib[,age:=(2017-birth_year)]
+
+  # Sexe des suscribers: on construit des dummies
+trips_suscrib[,female:=ifelse(gender=="Female",1,0)]
+trips_suscrib[,male:=ifelse(gender=="Male",1,0)]
+```
+
+### Suppression des variables inutiles pour la suite
+
+```{r}
+trips_suscrib[,c("from_latitude","from_longitude","from_location","to_latitude","to_longitude","to_location","birth_year","user_type"):=NULL]
+```
+
+#### Gestion de la date
+### On considère qu'une journée commence à 4h du matin  
+### On va décaler les dates et construire une variable qui nous dira si on est en semaine ou en week-end
+
+```{r}
+  # Départ: Heure
+trips_suscrib[, start_hr := hour(start_time)]
+  # Départ: Numéro du jour de la semaine : Levels: (1) Sun < Mon < Tue < Wed < Thu < Fri < Sat (7)
+trips_suscrib[, wday_n := data.table::wday(start_time - 4 * 3600)]
+  # Départ: Création d'une variable qui nous donne la partie de semaine
+trips_suscrib[, start_type_w:=ifelse((wday_n> 1 & wday_n<6),"week","week-end")]
+  # Départ: Création des dummies parties de la semaine
+trips_suscrib[,start_week:=ifelse(start_type_w=="week",1,0)]
+trips_suscrib[,start_week_end:=ifelse(start_type_w=="week-end",1,0)]
+
+trips_suscrib[,wday_n:=NULL]
+
+  # Arrivée: Heure
+trips_suscrib[, stop_hr := hour(stop_time)]
+  # Arrivée: Numéro du jour de la semaine : Levels: (1) Sun < Mon < Tue < Wed < Thu < Fri < Sat (7)
+trips_suscrib[, wday_n := data.table::wday(stop_time - 4 * 3600)]
+  # Arrivée: Création d'une variable qui nous donne la partie de semaine
+trips_suscrib[, stop_type_w:=ifelse((wday_n> 1 & wday_n<6),"week","week-end")]
+  # Arrivée: Création des dummies parties de la semaine
+trips_suscrib[,stop_week:=ifelse(stop_type_w=="week",1,0)]
+trips_suscrib[,stop_week_end:=ifelse(stop_type_w=="week-end",1,0)]
+
+trips_suscrib[,wday_n:=NULL]
+
+```
+
+
+#### Gestion des heures
+###  On va construire des tranches de 10 min par heure,
+###  notamment pour apparier avec les données stations
+
+```{r}
+  # Tranches d'heures de 10 min
+for (i in seq(0,59,by=10)){
+  trips_suscrib[(minute(start_time)>=0+i & minute(start_time)<10+i), start_tr_hor_10:= paste("[",i,"-",i+10,"[")]
+  trips_suscrib[(minute(stop_time)>=0+i & minute(stop_time)<10+i), stop_tr_hor_10:= paste("[",i,"-",i+10,"[")]
+}
+# Tranches d'heures de 15 min
+for (i in seq(0,59,by=15)){
+  trips_suscrib[(minute(start_time)>=0+i & minute(start_time)<15+i), start_tr_hor_15:= paste("[",i,"-",i+15,"[")]
+  trips_suscrib[(minute(stop_time)>=0+i & minute(stop_time)<15+i), stop_tr_hor_15:= paste("[",i,"-",i+15,"[")]
+}
+# Tranches d'heures de 20 min
+for (i in seq(0,59,by=20)){
+  trips_suscrib[(minute(start_time)>=0+i & minute(start_time)<20+i), start_tr_hor_20:= paste("[",i,"-",i+20,"[")]
+  trips_suscrib[(minute(stop_time)>=0+i & minute(stop_time)<20+i), stop_tr_hor_20:= paste("[",i,"-",i+20,"[")]
+}
+# Tranches d'heures de 30 min
+for (i in seq(0,59,by=30)){
+  trips_suscrib[(minute(start_time)>=0+i & minute(start_time)<30+i), start_tr_hor_30:= paste("[",i,"-",i+30,"[")]
+  trips_suscrib[(minute(stop_time)>=0+i & minute(stop_time)<30+i), stop_tr_hor_30:= paste("[",i,"-",i+30,"[")]
+}
+```
+
+```{r}
+# Tranches horaires: distribution homogène dans la table
+table(trips_suscrib[,start_tr_hor_10],useNA = "ifany")
+table(trips_suscrib[,start_tr_hor_15],useNA = "ifany")
+table(trips_suscrib[,start_tr_hor_20],useNA = "ifany")
+table(trips_suscrib[,start_tr_hor_30],useNA = "ifany")
+table(trips_suscrib[,stop_tr_hor_10],useNA = "ifany")
+table(trips_suscrib[,stop_tr_hor_15],useNA = "ifany")
+table(trips_suscrib[,stop_tr_hor_20],useNA = "ifany")
+table(trips_suscrib[,stop_tr_hor_30],useNA = "ifany")
+```
+
+```{r}
+trips_suscrib[,`:=`(start_month=month(start_time),start_day=day(start_time),stop_month=month(stop_time),stop_day=day(stop_time))]
+```
+
+
+#### Mise en forme des données STATIONS
+### Ce qu'on souhaite c'est récupérer les taux d'utilisation des stations
+### leurs capacités
+
+```{r}
+tmpfs <- fread("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/data_raw/divvy_stations_2019_01_17_17_16_48_9e84be9337f.csv")
+```
+
+```{r}
+tmpfs[,total_docks:=as.integer(total_docks)]
+setorder (tmpfs,id,timestamp)
+```
+
+#### Suppression de variables à ce stade non utiles
+```{r}
+tmpfs[,c("address","latitude","longitude","location","station_name"):=NULL]
+```
+
+
+
+#### Gestion de la date
+### On considère qu'une journée commence à 4h du matin  
+### On va décaler les dates et construire une variable qui nous dira si on est en semaine ou en week-end
+
+```{r}
+  # On passe en format date
+tmpfs[,timestamp := as_datetime(timestamp)] 
+  # Heure
+tmpfs[,hr := hour(timestamp)]
+```
+
+```{r}
+tmpfs[,`:=`(month=month(timestamp),day=day(timestamp))]
+```
+
+
+
+#### Gestion des heures
+###  On va construire des tranches horaires,
+###  notamment pour apparier avec les données stations
+
+```{r}
+  # Tranches d'heures de 10 min
+for (i in seq(0,59,by=10)){
+  tmpfs[(minute(timestamp)>=0+i & minute(timestamp)<10+i), tr_hor_10:= paste("[",i,"-",i+10,"[")]
+}
+  # Tranches d'heures de 15 min
+for (i in seq(0,59,by=15)){
+  tmpfs[(minute(timestamp)>=0+i & minute(timestamp)<15+i), tr_hor_15:= paste("[",i,"-",i+15,"[")]
+}
+  # Tranches d'heures de 20 min
+for (i in seq(0,59,by=20)){
+  tmpfs[(minute(timestamp)>=0+i & minute(timestamp)<20+i), tr_hor_20:= paste("[",i,"-",i+20,"[")]
+}
+  # Tranches d'heures de 30 min
+for (i in seq(0,59,by=30)){
+  tmpfs[(minute(timestamp)>=0+i & minute(timestamp)<30+i), tr_hor_30:= paste("[",i,"-",i+30,"[")]
+}
+```
+
+
+
+#### Taux d'utilisation des bornes
+
+```{r}
+# total_docks : capacité totale de la station (nb total de places disponibles pour accueillir un vélo). 
+# docks_in_service: places en fonctionnement pour accueillir un vélo (= total_docks - pannes)
+
+# available_docks: places libres parmi les places en fonctionnement
+# available_bikes: nb de vélos disponibles à la station
+#     => available_docks + available_bikes = docks_in_service
+
+# pct_full    = taux de remplissage de la station (available_bikes/total_docks)
+# pct_full_av = taux de remplissage de la station si on ne tient compte que des places disponibles (available_bikes/docks_in_service)
+
+tmpfs[,pct_full   :=round((available_bikes/total_docks),2)*100]
+tmpfs[,pct_full_av:=round((available_bikes/docks_in_service),2)*100]
+
+# On va créer deux tops : en service (oui/non) et pas en service (dès que ce n'est pas en service: les autres situations)
+
+tmpfs[,in_service    :=ifelse((status=="In Service"),1,0)]
+tmpfs[,not_in_service:=ifelse(!(status=="In Service"),1,0)]
+
+```
+
+# il faut agréger par vélo, date (mois, jour), heure,tranche horaire, par vélo
+```{r}
+# Quelle que soit la tranche horaire (10,15,20 et 30) considérée la distribution des variables m_pct_full et m_pct_full_av est la même. Ce qui change c'est le nombre de valeurs manquantes (augmente avec la largeur de la tranche horaire)
+# On choisit arbitrairement 15 min pour l'égrégation des indicateurs
+#> summary(stations1[,m_pct_full],useNA = "ifany")
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+#    0.0    26.0    40.0    43.3    60.0   100.0      42 
+#    0.0    26.0    40.0    43.3    60.0   100.0      51 
+#    0.0    26.0    40.0    43.3    60.0   100.0      57 
+#    0.0    26.0    40.33   43.30   60.00  100.00     71 
+#> summary(stations1[,m_pct_full_av],useNA = "ifany")
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+#   0.00   26.00   43.00   44.69   64.00  100.00     255 
+#   0.00   26.00   43.00   44.69   64.00  100.00     270 
+#   0.00   26.00   43.00   44.69   64.00  100.00     279 
+#   0.00   26.00   43.00   44.69   64.00  100.00     299 
+
+  # Pour la capacité on prend la moyenne
+
+sd_col  <- c("total_docks","docks_in_service","available_docks","available_bikes","pct_full","pct_full_av")
+new_col <- c("m_total_docks","m_docks_in_service","m_available_docks","m_available_bikes","m_pct_full","m_pct_full_av")
+
+stations1 <- tmpfs[,c(new_col):=lapply(.SD,mean),.SDcols=sd_col,by=.(id,month,day,hr,tr_hor_15)][,list(id,month, day,hr,tr_hor_15,m_total_docks,m_docks_in_service,m_available_docks,m_available_bikes,m_pct_full,m_pct_full_av)]
+
+rm(sd_col)
+rm(new_col)
+
+# Pour le fonctionnement de la station on prend la part du temps "en service dans la tranche horaire
+stations2 <- tmpfs[,m_pct_in_service:=round(mean(in_service/(in_service+not_in_service)),2)*100,by=.(id,month,day,hr,tr_hor_15)][,list(id,month, day,hr,tr_hor_15,m_pct_in_service)]
+
+rm(tmpfs)
+```
+
+```{r}
+ # On supprime les doublons   
+stations1<-unique(stations1)
+stations2<-unique(stations2)
+```
+
+
+```{r}
+
+
+ # On merge stations1 et stations2
+
+# on merge sur l'id et l'heure d'utilisation de la borne
+
+# On fait un inner join (une intersection, en théorie toules les lignes sont en commun)
+stations <- merge(stations1,stations2, by=c("id","month","day","hr","tr_hor_15"))
+
+rm(stations1)
+rm(stations2)
+```
+
+#### On ajoute les infos de stations à la table des trajets
+
+```{r}
+# On fait un left outer join pour ajouter les variables en fonction des valeurs de départ des trajets
+
+trips_suscrib[,id:=from_station_id]
+trips_suscrib[,month:=start_month]
+trips_suscrib[,day:=start_day]
+trips_suscrib[,hr:=start_hr]
+trips_suscrib[,tr_hor_15:=start_tr_hor_15]
+
+trips_suscrib<-merge(trips_suscrib,stations,by=c("id","month","day","hr","tr_hor_15"),all.x =TRUE)
+
+setnames(trips_suscrib, "m_total_docks","start_m_total_docks")
+setnames(trips_suscrib, "m_docks_in_service","start_m_docks_in_service")
+setnames(trips_suscrib, "m_available_docks","start_m_available_docks")
+setnames(trips_suscrib, "m_available_bikes","start_m_available_bikes")
+setnames(trips_suscrib, "m_pct_full","start_m_pct_full")
+setnames(trips_suscrib, "m_pct_full_av","start_m_pct_full_av")
+setnames(trips_suscrib, "m_pct_in_service","start_m_pct_in_service")
+
+# On fait un left outer join pour ajouter les variables en fonction des valeurs d'arrivée des trajets
+
+trips_suscrib[,id:=to_station_id]
+trips_suscrib[,month:=stop_month]
+trips_suscrib[,day:=stop_day]
+trips_suscrib[,hr:=stop_hr]
+trips_suscrib[,tr_hor_15:=stop_tr_hor_15]
+
+trips_suscrib<-merge(trips_suscrib,stations,by=c("id","month","day","hr","tr_hor_15"),all.x =TRUE)
+
+setnames(trips_suscrib, "m_total_docks","stop_m_total_docks")
+setnames(trips_suscrib, "m_docks_in_service","stop_m_docks_in_service")
+setnames(trips_suscrib, "m_available_docks","stop_m_available_docks")
+setnames(trips_suscrib, "m_available_bikes","stop_m_available_bikes")
+setnames(trips_suscrib, "m_pct_full","stop_m_pct_full")
+setnames(trips_suscrib, "m_pct_full_av","stop_m_pct_full_av")
+setnames(trips_suscrib, "m_pct_in_service","stop_m_pct_in_service")
+
+rm(stations)
+
+trips_suscrib[,c("start_tr_hor_10","start_tr_hor_20","start_tr_hor_30","stop_tr_hor_10","stop_tr_hor_20","stop_tr_hor_30","id","month","day","hr","tr_hor_15"):=NULL]
+
+saveRDS(trips_suscrib,"D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/fichier_anissa/trips_suscrib.rda")
+```
+
+
+```{r}
+# A faire : imputer les valeurs manquantes pour le strajets sans taux de remplissage
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
