@@ -199,6 +199,7 @@ shinyServer(function(input, output) {
       stations_visu = stations_visu,
       stationsKM = stationsKM,
       coor_st = coor_st,
+      st_dn = st_dn,
       classifST = classifST
     ) 
   })
@@ -213,7 +214,7 @@ shinyServer(function(input, output) {
     
     output$latlongclusterPlot <- renderPlot({
         d <- recactiveClustering()
-        d$stations_visu[st_dn[, .(dailyNlog10 = as.integer(log10(pmax(1, dailyN, na.rm = TRUE))), id = station_id)], on = 'id'] %>% 
+        d$stations_visu[d$st_dn[, .(dailyNlog10 = as.integer(log10(pmax(1, dailyN, na.rm = TRUE))), id = station_id)], on = 'id'] %>% 
             ggplot() +
             geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'white') +
             geom_point(aes(longitude, latitude, color = classeKM, alpha = dailyNlog10)) +
@@ -250,7 +251,7 @@ shinyServer(function(input, output) {
         melt(value.name = 'N') %>% 
         mutate(classeKM = as.factor(Var1), hrtf = Var2) %>% 
         left_join(hrtf %>% as.tibble(), by = 'hrtf') %>%
-        left_join(stationsKM[,.(station_id, classeKM)][st_dn, on = 'station_id'][, .(sum_dn = sum(dailyN)), classeKM], on = 'classeKM') %>% 
+        left_join(d$stationsKM[,.(station_id, classeKM)][d$st_dn, on = 'station_id'][, .(sum_dn = sum(dailyN)), classeKM], on = 'classeKM') %>% 
       ggplot(aes(as.numeric(hr), N)) +
         geom_line(
           aes(group = interaction(classeKM, type), color = classeKM, alpha = log10(sum_dn))
@@ -263,7 +264,7 @@ shinyServer(function(input, output) {
 
     output$tripdailynPlot <- renderPlot({
       d <- recactiveClustering()
-      d$stations_visu[st_dn[, .(dailyNlog10 = as.integer(log10(dailyN)), id = station_id)], on = 'id'] %>% 
+      d$stations_visu[d$st_dn[, .(dailyNlog10 = as.integer(log10(dailyN)), id = station_id)], on = 'id'] %>% 
         ggplot() +
         geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
         geom_point(aes(longitude, latitude, color = classeKM)) +
