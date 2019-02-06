@@ -14,6 +14,7 @@ library(magrittr)
 library(data.table)
 library(leaflet)
 library(tictoc)
+library(plotly)
 
 
 ## We load data outside of shinyServer function, so as it is loaded only once
@@ -204,18 +205,21 @@ shinyServer(function(input, output) {
         write_rds(d, path = tmpf)
     })
     
-    output$latlongclusterPlot <- renderPlot({
+    output$latlongclusterPlot <- renderPlotly({
         d <- recactiveClustering()
-        d$stations_visu[d$st_dn[, .(dailyNlog10 = as.integer(log10(pmax(1, dailyN, na.rm = TRUE))), id = station_id)], on = 'id'] %>% 
+        (
+          d$stations_visu[d$st_dn[, .(dailyNlog10 = as.integer(log10(pmax(1, dailyN, na.rm = TRUE))), id = station_id)], on = 'id'] %>% 
             ggplot() +
-            geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'white') +
-            geom_point(aes(longitude, latitude, color = classeKM, alpha = dailyNlog10)) +
-            facet_wrap(~classeKM)
+              geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'white') +
+              geom_point(aes(longitude, latitude, color = classeKM, alpha = dailyNlog10)) +
+              facet_wrap(~classeKM) 
+        ) %>% ggplotly()
     })
     
-    output$tripratePlot <- renderPlot({
+    output$tripratePlot <- renderPlotly({
         d <- recactiveClustering()
-        d$station_movements_subset[hrtf, on = 'hrtf'][d$stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
+        (
+          d$station_movements_subset[hrtf, on = 'hrtf'][d$stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
 #        (d$station_movements_kmeans_input %>% melt('station_id', variable.name = 'hrtf', value.name = 'N'))[hrtf, on='hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
             ggplot(aes(as.numeric(hr), N)) +
             geom_line(
@@ -235,32 +239,37 @@ shinyServer(function(input, output) {
             scale_x_continuous(labels = function(x) { (x + night_thd - 1) %% 24 } ) +
             labs(x = 'hour', y = 'pct of daily a/d (+ arrival, - departures)') +
             ylim(-.2, .2)
+        ) %>% ggplotly()
     })
 
-    output$triprateclustermeansPlot <- renderPlot({
+    output$triprateclustermeansPlot <- renderPlotly({
       d <- recactiveClustering()
-      d$classifST$centers %>% 
-        melt(value.name = 'N') %>% 
-        mutate(classeKM = as.factor(Var1), hrtf = Var2) %>% 
-        left_join(hrtf %>% as.tibble(), by = 'hrtf') %>%
-        left_join(d$stationsKM[,.(station_id, classeKM)][d$st_dn, on = 'station_id'][, .(sum_dn = sum(dailyN)), classeKM], on = 'classeKM') %>% 
-      ggplot(aes(as.numeric(hr), N)) +
-        geom_line(
-          aes(group = interaction(classeKM, type), color = classeKM, alpha = log10(sum_dn))
-        ) +
-        # Scale to 5-23 0-4. as.numeric(hr) return 1 (not 0) for the first hour (i.e. night_thd)
-        scale_x_continuous(labels = function(x) { (x + night_thd - 1) %% 24 } ) +
-        labs(x = 'hour', y = 'pct of daily a/d (+ arrival, - departures)') +
-        ylim(-.2, .2)
+      (
+        d$classifST$centers %>% 
+          melt(value.name = 'N') %>% 
+          mutate(classeKM = as.factor(Var1), hrtf = Var2) %>% 
+          left_join(hrtf %>% as.tibble(), by = 'hrtf') %>%
+          left_join(d$stationsKM[,.(station_id, classeKM)][d$st_dn, on = 'station_id'][, .(sum_dn = sum(dailyN)), classeKM], on = 'classeKM') %>% 
+        ggplot(aes(as.numeric(hr), N)) +
+          geom_line(
+            aes(group = interaction(classeKM, type), color = classeKM, alpha = log10(sum_dn))
+          ) +
+          # Scale to 5-23 0-4. as.numeric(hr) return 1 (not 0) for the first hour (i.e. night_thd)
+          scale_x_continuous(labels = function(x) { (x + night_thd - 1) %% 24 } ) +
+          labs(x = 'hour', y = 'pct of daily a/d (+ arrival, - departures)') +
+          ylim(-.2, .2)
+      ) %>% ggplotly()
     })
 
-    output$tripdailynPlot <- renderPlot({
+    output$tripdailynPlot <- renderPlotly({
       d <- recactiveClustering()
-      d$stations_visu[d$st_dn[, .(dailyNlog10 = as.integer(log10(dailyN)), id = station_id)], on = 'id'] %>% 
-        ggplot() +
-        geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
-        geom_point(aes(longitude, latitude, color = classeKM)) +
-        facet_wrap(~dailyNlog10)
+      (
+        d$stations_visu[d$st_dn[, .(dailyNlog10 = as.integer(log10(dailyN)), id = station_id)], on = 'id'] %>% 
+          ggplot() +
+          geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
+          geom_point(aes(longitude, latitude, color = classeKM)) +
+          facet_wrap(~dailyNlog10)
+      ) %>% ggplotly()
     })
     
     
