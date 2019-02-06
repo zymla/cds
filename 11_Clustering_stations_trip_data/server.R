@@ -137,37 +137,29 @@ shinyServer(function(input, output) {
     print(wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat)])
     #= Select data sample ===========================================================
     station_movements_subset <- 
-      (
-        station_movements[
-          wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat), .(wday_abr)],
+      station_movements[#
+        wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat), .(wday_abr)],
 #          wdays[c(1), .(wday_abr)],
-          on = 'wday_abr'
-        ][
-          , 
-          .(N = sum(N, na.rm = TRUE)), 
-          .(hr, station_id, type)
-        ] %>%
-          { 
-            rbind(
-              .[type == 'from', .(type, hr, N = -N), station_id],
-              .[type == 'to',   .(type, hr, N),      station_id]
-            )
-          }
-      )[
+        on = 'wday_abr'
+      ][
+        , 
+        .(N = sum(N, na.rm = TRUE) * if_else(type == 'to', 1, -1)), 
+        .(hr, station_id, type)
+      ][
         hrtf, 
         on = c('hr', 'type'),
         nomatch = 0
       ][
         order(station_id, hrtf)
       ][
-        , 
-        .(hr, hrtf, N, dailyN = sum(abs(N), na.rm = TRUE)), 
+        ,
+        dailyN := sum(abs(N), na.rm = TRUE),
         station_id
       ][
-        , 
-        .(N = N/dailyN, dailyN, station_id, hrtf)
+        ,
+        N := N/dailyN
       ]
-    
+
     station_movements_subset <- station_movements_subset[stid_hrtf, on = c('hrtf', 'station_id'), ]
     station_movements_subset[is.na(N), N := 0]
     st_dn <- station_movements_subset[, .(dailyN = min(dailyN, na.rm = TRUE)), station_id]
