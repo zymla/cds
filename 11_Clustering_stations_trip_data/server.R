@@ -133,7 +133,7 @@ print("Done creating features")
 
 # Define server logic required to draw a histogram
 shinyServer(function(input, output) {
-  recactiveClustering <- reactive({
+  reactiveClustering <- reactive({
     input$recompute
     print(wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat)])
     #= Select data sample ===========================================================
@@ -154,26 +154,26 @@ shinyServer(function(input, output) {
         order(station_id, hrtf)
       ][
         ,
-        dailyN := sum(abs(N), na.rm = TRUE),
+        totalN := sum(abs(N), na.rm = TRUE),
         station_id
       ][
         ,
-        N := N/dailyN
+        rate := N/totalN
       ]
 
     station_movements_subset <- station_movements_subset[stid_hrtf, on = c('hrtf', 'station_id'), ]
-    station_movements_subset[is.na(N), N := 0]
-    st_dn <- station_movements_subset[, .(dailyN = min(dailyN, na.rm = TRUE)), station_id]
-    st_dn[is.infinite(dailyN), dailyN := 0]
+    station_movements_subset[is.na(rate), rate := 0]
+    st_dn <- station_movements_subset[, .(totalN = min(totalN, na.rm = TRUE)), station_id]
+    st_dn[is.infinite(totalN), totalN := 0]
     station_movements_subset <-
-      station_movements_subset[, .(N, station_id, hrtf)][, .(N, station_id, hrtf)][st_dn, on = 'station_id', all = TRUE]
+      station_movements_subset[, .(rate, station_id, hrtf)][, .(rate, station_id, hrtf)][st_dn, on = 'station_id', all = TRUE]
     print("Done selecting sample")
       
     #= Format data sample for kmeans ===========================================================
     station_movements_kmeans_input <-
-      station_movements_subset[!is.na(station_id)] %>% dcast(station_id + dailyN ~ hrtf, fill = 0, value.var = 'N')
-    station_movements_kmeans_input[, `:=`(dailyN = 1000*(dailyN <= input$low_trips_thd))]
-#    station_movements_kmeans_input[, `:=`(dailyN = 1000*(dailyN <= 1000))]
+      station_movements_subset[!is.na(station_id)] %>% dcast(station_id + totalN ~ hrtf, fill = 0, value.var = 'rate')
+    station_movements_kmeans_input[, `:=`(totalN = 1000*(totalN <= input$low_trips_thd))]
+#    station_movements_kmeans_input[, `:=`(totalN = 1000*(totalN <= 1000))]
    # station_movements_kmeans_input %<>% na.omit()
     
     km_cent <- input$nb_clusters # PARAMETRE A FAIRE VARIER
@@ -198,7 +198,7 @@ shinyServer(function(input, output) {
   })
 
     observeEvent(input$flush, {
-        d <- recactiveClustering()
+        d <- reactiveClustering()
         tmpf <- paste0('data_log_stations_trips_', now() %>% str_replace_all('[^0-9]+', '_'), '.rds')
         print(tmpf)
         print(getwd())
@@ -206,22 +206,22 @@ shinyServer(function(input, output) {
     })
     
     output$latlongclusterPlot <- renderPlotly({
-        d <- recactiveClustering()
+        d <- reactiveClustering()
         (
-          d$stations_visu[d$st_dn[, .(dailyNlog10 = as.integer(log10(pmax(1, dailyN, na.rm = TRUE))), id = station_id)], on = 'id'] %>% 
+          d$stations_visu[d$st_dn[, .(totalNlog10 = as.integer(log10(pmax(1, totalN, na.rm = TRUE))), totalN, id = station_id)], on = 'id'] %>% 
             ggplot() +
               geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'white') +
-              geom_point(aes(longitude, latitude, color = classeKM, alpha = dailyNlog10)) +
+              geom_point(aes(longitude, latitude, color = classeKM, alpha = totalNlog10, text = paste('Total trips:', totalN))) +
               facet_wrap(~classeKM) 
         ) %>% ggplotly()
     })
     
     output$tripratePlot <- renderPlotly({
-        d <- recactiveClustering()
+        d <- reactiveClustering()
         (
           d$station_movements_subset[hrtf, on = 'hrtf'][d$stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
-#        (d$station_movements_kmeans_input %>% melt('station_id', variable.name = 'hrtf', value.name = 'N'))[hrtf, on='hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
-            ggplot(aes(as.numeric(hr), N)) +
+#        (d$station_movements_kmeans_input %>% melt('station_id', variable.name = 'hrtf', value.name = 'rate'))[hrtf, on='hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
+            ggplot(aes(as.numeric(hr), rate)) +
             geom_line(
                 aes(group = interaction(station_id, type), color = classeKM),
                 alpha = input$alpha
@@ -229,7 +229,7 @@ shinyServer(function(input, output) {
             geom_line(
                 data = 
                   d$classifST$centers %>% 
-                    melt(value.name = 'N') %>% 
+                    melt(value.name = 'rate') %>% 
                     mutate(classeKM = as.factor(Var1), hrtf = Var2) %>% 
                     left_join(hrtf %>% as.tibble(), by = 'hrtf'),
                 aes(group = interaction(classeKM, type))
@@ -243,14 +243,14 @@ shinyServer(function(input, output) {
     })
 
     output$triprateclustermeansPlot <- renderPlotly({
-      d <- recactiveClustering()
+      d <- reactiveClustering()
       (
         d$classifST$centers %>% 
-          melt(value.name = 'N') %>% 
+          melt(value.name = 'rate') %>% 
           mutate(classeKM = as.factor(Var1), hrtf = Var2) %>% 
           left_join(hrtf %>% as.tibble(), by = 'hrtf') %>%
-          left_join(d$stationsKM[,.(station_id, classeKM)][d$st_dn, on = 'station_id'][, .(sum_dn = sum(dailyN)), classeKM], on = 'classeKM') %>% 
-        ggplot(aes(as.numeric(hr), N)) +
+          left_join(d$stationsKM[,.(station_id, classeKM)][d$st_dn, on = 'station_id'][, .(sum_dn = sum(totalN)), classeKM], on = 'classeKM') %>% 
+        ggplot(aes(as.numeric(hr), rate)) +
           geom_line(
             aes(group = interaction(classeKM, type), color = classeKM, alpha = log10(sum_dn))
           ) +
@@ -261,16 +261,14 @@ shinyServer(function(input, output) {
       ) %>% ggplotly()
     })
 
-    output$tripdailynPlot <- renderPlotly({
-      d <- recactiveClustering()
+    output$triptotalNPlot <- renderPlotly({
+      d <- reactiveClustering()
       (
-        d$stations_visu[d$st_dn[, .(dailyNlog10 = as.integer(log10(dailyN)), id = station_id)], on = 'id'] %>% 
+        d$stations_visu[d$st_dn[, .(totalNlog10 = as.integer(log10(totalN)), totalN, id = station_id)], on = 'id'] %>% 
           ggplot() +
           geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'gray') +
-          geom_point(aes(longitude, latitude, color = classeKM)) +
-          facet_wrap(~dailyNlog10)
+          geom_point(aes(longitude, latitude, color = classeKM, text = paste('Total trips:', totalN))) +
+          facet_wrap(~totalNlog10)
       ) %>% ggplotly()
     })
-    
-    
 })

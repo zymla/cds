@@ -54,7 +54,7 @@ shinyUI(fluidPage(
             withSpinner(plotlyOutput("latlongclusterPlot")),
             withSpinner(plotlyOutput("tripratePlot")),
             withSpinner(plotlyOutput("triprateclustermeansPlot")),
-            withSpinner(plotlyOutput("tripdailynPlot"))
+            withSpinner(plotlyOutput("triptotalNPlot"))
         )
     )
 ))
