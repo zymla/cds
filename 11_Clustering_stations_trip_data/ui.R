@@ -10,6 +10,7 @@
 library(shiny)
 library(shinycssloaders)
 library(plotly)
+library(DT)
 
 
 
@@ -51,10 +52,12 @@ shinyUI(fluidPage(
         
         # Show a plot of the generated distribution
         mainPanel(
-            withSpinner(plotlyOutput("latlongclusterPlot")),
-            withSpinner(plotlyOutput("tripratePlot")),
-            withSpinner(plotlyOutput("triprateclustermeansPlot")),
-            withSpinner(plotlyOutput("triptotalNPlot"))
+          verbatimTextOutput('debugText', placeholder = TRUE),
+#          tableOutput('latlonghoverDT'),
+          withSpinner(plotlyOutput("latlongclusterPlot")),
+          withSpinner(plotlyOutput("tripratePlot")),
+          withSpinner(plotlyOutput("triprateclustermeansPlot")),
+          withSpinner(plotlyOutput("triptotalNPlot"))
         )
     )
 ))

@@ -15,6 +15,7 @@ library(data.table)
 library(leaflet)
 library(tictoc)
 library(plotly)
+library(DT)
 
 
 ## We load data outside of shinyServer function, so as it is loaded only once
@@ -48,9 +49,9 @@ if(length(list.files('.', pattern = 'station_movements.rds'))){
   print(trips_filename)
   trips <- 
     fread(
-      #    nrows = 1e6,
+#          nrows = 1e6,
       trips_filename, 
-      select = c('from_latitude', 'from_longitude', 'from_station_id', 'start_time', 'stop_time', 'to_latitude', 'to_longitude', 'to_station_id'), 
+      select = c('from_latitude', 'from_longitude', 'from_station_id', 'from_station_name', 'start_time', 'stop_time', 'to_latitude', 'to_longitude', 'to_station_id', 'to_station_name'), 
       na.strings = c("")
     )
   trips[
@@ -85,9 +86,10 @@ if(length(list.files('.', pattern = 'station_movements.rds'))){
   coor_st <-
     trips[
       !is.na(from_longitude) & !is.na(from_latitude), 
-      .(latitude = last(from_latitude), longitude = last(from_longitude)), 
+      .(latitude = last(from_latitude), longitude = last(from_longitude), station_name = last(from_station_name)), 
       .(id = from_station_id)
       ]
+  print(head(coor_st))
   
   station_movements <-
       station_trips[
@@ -106,7 +108,7 @@ if(length(list.files('.', pattern = 'station_movements.rds'))){
 }
 
 station_movements <- station_movements[wdays, on = 'wday_n']
-coor_st <- station_movements[, .(longitude = last(longitude), latitude = last(latitude)), .(id = station_id)]
+coor_st <- station_movements[, .(longitude = last(longitude), latitude = last(latitude), station_name = last(station_name)), .(id = station_id)]
 
 hrtf <-
     union_all(
@@ -204,16 +206,43 @@ shinyServer(function(input, output) {
         print(getwd())
         write_rds(d, path = tmpf)
     })
+
+    output$debugText <- renderText({
+      eventdata <- event_data("plotly_hover", source = 'latlongcluster')#, source = "source")
+      #print('got hover')
+      print(str(eventdata))
+      validate(need(!is.null(eventdata) & 'key' %in% colnames(eventdata), "Hover over the chart"))
+      #as.character(eventdata)
+      d <- reactiveClustering()
+      d$stations_visu[d$st_dn[, .(totalNlog10 = as.integer(log10(pmax(1, totalN, na.rm = TRUE))), totalN, id = station_id)], on = 'id'][id %in% eventdata$key] %>% as.character
+    })    
     
+    output$latlonghoverDT <- renderTable({
+      eventdata <- event_data("plotly_hover", source = 'latlongcluster')#, source = "source")
+      #print('got hover')
+      print(str(eventdata))
+      validate(need(!is.null(eventdata) & 'key' %in% colnames(eventdata), "Hover over the chart"))
+      #as.character(eventdata)
+      d <- reactiveClustering()
+      d$stations_visu[d$st_dn[, .(totalNlog10 = as.integer(log10(pmax(1, totalN, na.rm = TRUE))), totalN, id = station_id)], on = 'id'][id %in% eventdata$key]
+    })
     output$latlongclusterPlot <- renderPlotly({
         d <- reactiveClustering()
         (
           d$stations_visu[d$st_dn[, .(totalNlog10 = as.integer(log10(pmax(1, totalN, na.rm = TRUE))), totalN, id = station_id)], on = 'id'] %>% 
             ggplot() +
-              geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'white') +
-              geom_point(aes(longitude, latitude, color = classeKM, alpha = totalNlog10, text = paste('Total trips:', totalN))) +
+              geom_point(data = d$stations_visu[, .(longitude, latitude)], aes(longitude, latitude), color = 'white', key = NA) +
+              geom_point(aes(longitude, latitude, color = classeKM, alpha = totalNlog10, key = id, text = paste('Total trips:', totalN, '<br>', station_name))) +
               facet_wrap(~classeKM) 
-        ) %>% ggplotly()
+        ) %>% ggplotly(source = 'latlongcluster') 
+#%>% onRender("
+#    function(el, x) {
+#      el.on('plotly_click', function(d) {
+#        var url = d.points[0].customdata;
+#        window.open('http://news.google.com');
+#      });
+#    }
+#  ")
     })
     
     output$tripratePlot <- renderPlotly({
@@ -239,7 +268,7 @@ shinyServer(function(input, output) {
             scale_x_continuous(labels = function(x) { (x + night_thd - 1) %% 24 } ) +
             labs(x = 'hour', y = 'pct of daily a/d (+ arrival, - departures)') +
             ylim(-.2, .2)
-        ) %>% ggplotly()
+        ) %>% ggplotly() 
     })
 
     output$triprateclustermeansPlot <- renderPlotly({
