@@ -1,0 +1,320 @@
+---
+title: "1_Stat_des_customers_2017"
+output: html_document
+---
+
+
+```{r}
+library(data.table)
+library(magrittr)
+```
+
+
+
+#### Présentation du programme
+# Etape 1 : on passe du trips (1 voyage) à une agrégation au niveau trajet (from id to id)
+# Etape 2 : Clustering k-means
+# Etape 3 : CAH
+# Etape 4 : ACP + CAH
+
+
+
+#### Agrégation de la base au niveau trajet 
+
+```{r}
+# On appelle la table
+trips_suscrib <- readRDS("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/fichier_anissa/trips_suscrib.rda")
+
+setorderv(trips_suscrib,c("trajet_id","start_time"))
+
+
+# Suppression des variables qu'on n'utilisera pas 
+trips_suscrib[,c("from_station_id","to_station_id","from_station_name","to_station_name","start_time","stop_time","stop_hr","stop_type_w","stop_week","stop_week_end","stop_tr_hor_15","gender"):=NULL]
+
+```
+
+
+#### Quelques statistiques descriptives sur les trajets
+
+```{r}
+  # Combien de trajets différents ?
+trajet_unique <- uniqueN(trips_suscrib[,c("trajet_id")])
+trajet_unique
+rm(trajet_unique)
+```
+
+```{r}
+  # Combien de trips par trajet ?
+  # Queue de distribution étalée à droite : tester robustesse face aux valeurs élevées
+nb_trips <-unique(trips_suscrib[,trips:=.N, by=.(trajet_id)][,list(trajet_id,trips)])
+summary(nb_trips[,trips])
+quantile(nb_trips[,trips],c(0.01))
+quantile(nb_trips[,trips],c(0.05))
+quantile(nb_trips[,trips],c(0.1))
+quantile(nb_trips[,trips],c(0.9))
+quantile(nb_trips[,trips],c(0.95))
+quantile(nb_trips[,trips],c(0.99))
+quantile(nb_trips[,trips],c(0.995))
+  hist(nb_trips[trips>264,trips],breaks=10,xlim=c(265,1250))
+plot(density(nb_trips[,trips]))
+plot(density(nb_trips[trips>264,trips]))
+
+rm(nb_trips)
+trips_suscrib[,trips:=NULL]
+```
+
+#### Constrution des indicateurs agrégé au niveau trajet
+
+```{r}
+  ### Caractéristiques des cyclistes
+
+  # Age des cyclistes
+trips_suscrib[,moy_age:=round(mean(age,na.rm=TRUE)),by=c("trajet_id")]
+trips_suscrib[,med_age:=round(median(as.double(age),na.rm=TRUE)),by=c("trajet_id")]
+
+  # Sexe des cyclistes
+trips_suscrib[,fem:=sum(female),by=c("trajet_id")]
+trips_suscrib[,hom:=sum(male),by=c("trajet_id")]
+trips_suscrib[,pct_femme:=round(fem/(fem+hom),3)*100]
+
+  ### Nb de trips au total
+trips_suscrib[,nb_trips_tot:=.N]
+
+  ### Horaire des trajets
+trips_suscrib[,start_week_eff:=sum(start_week),by=c("trajet_id")]
+trips_suscrib[,start_week_end_eff:=sum(start_week_end),by=c("trajet_id")]
+trips_suscrib[,pct_start_week:=round(start_week_eff/(start_week_eff+start_week_end_eff),3)*100]
+
+  # Nb et part des trips par trajet
+trips_suscrib[,nb_trips:=.N,by=c("trajet_id")]  
+trips_suscrib[,pct_trips:=round((nb_trips/nb_trips_tot),3)*100]
+trips_suscrib[,nb_trips_tot:=NULL]
+
+  # Nb de vélos différents au total
+trips_suscrib[,nb_bike_tot:=uniqueN(bike_id)]
+  # Nb et part des vélos par trajet
+trips_suscrib[,nb_bike:=uniqueN(bike_id),by=c("trajet_id")]
+trips_suscrib[,pct_bike:=round((nb_bike/nb_bike_tot),3)*100]
+trips_suscrib[,nb_bike_tot:=NULL]
+  
+  # Durée moyenne par trajet
+trips_suscrib[,moy_duration:=round(mean(trip_duration,na.rm=TRUE)),by=c("trajet_id")]
+trips_suscrib[,med_duration:=round(median(as.double(trip_duration),na.rm=TRUE)),by=c("trajet_id")]
+
+  # Disponibilité des vélos aux stations
+trips_suscrib[,dep_moy_total_docks:=round(mean(start_m_total_docks, na.rm=TRUE)),by=c("trajet_id")]
+trips_suscrib[,dep_med_total_docks:=round(median(as.double(start_m_total_docks),na.rm=TRUE)),by=c("trajet_id")]
+
+trips_suscrib[,dep_moy_docks_in_service:=round(mean(start_m_docks_in_service, na.rm=TRUE)),by=c("trajet_id")]
+trips_suscrib[,dep_med_docks_in_service:=round(median(as.double(start_m_docks_in_service),na.rm=TRUE)),by=c("trajet_id")]
+
+trips_suscrib[,dep_moy_avail_docks:=round(mean(start_m_available_docks, na.rm=TRUE)),by=c("trajet_id")]
+trips_suscrib[,dep_med_avail_docks:=round(median(as.double(start_m_available_docks),na.rm=TRUE)),by=c("trajet_id")]
+
+trips_suscrib[,dep_moy_avail_bikes:=round(mean(start_m_available_bikes, na.rm=TRUE)),by=c("trajet_id")]
+trips_suscrib[,dep_med_avail_bikes:=round(median(as.double(start_m_available_bikes),na.rm=TRUE)),by=c("trajet_id")]
+
+trips_suscrib[,dep_moy_pct_full:=round(mean(start_m_pct_full, na.rm=TRUE),1),by=c("trajet_id")]
+trips_suscrib[,dep_med_pct_full:=round(median(as.double(start_m_pct_full),na.rm=TRUE),1),by=c("trajet_id")]
+
+trips_suscrib[,dep_moy_pct_full_av:=round(mean(start_m_pct_full_av, na.rm=TRUE),1),by=c("trajet_id")]
+trips_suscrib[,dep_med_pct_full_av:=round(median(as.double(start_m_pct_full_av),na.rm=TRUE),1),by=c("trajet_id")]
+
+trips_suscrib[,dep_moy_pct_in_service:=round(mean(start_m_pct_in_service, na.rm=TRUE),1),by=c("trajet_id")]
+trips_suscrib[,dep_med_pct_in_service:=round(median(as.double(start_m_pct_in_service),na.rm=TRUE),1),by=c("trajet_id")]
+
+trips_suscrib[,arr_moy_total_docks:=round(mean(start_m_total_docks, na.rm=TRUE)),by=c("trajet_id")]
+trips_suscrib[,arr_med_total_docks:=round(median(as.double(start_m_total_docks),na.rm=TRUE)),by=c("trajet_id")]
+
+trips_suscrib[,arr_moy_docks_in_service:=round(mean(start_m_docks_in_service, na.rm=TRUE)),by=c("trajet_id")]
+trips_suscrib[,arr_med_docks_in_service:=round(median(as.double(start_m_docks_in_service),na.rm=TRUE)),by=c("trajet_id")]
+
+trips_suscrib[,arr_moy_avail_docks:=round(mean(start_m_available_docks, na.rm=TRUE)),by=c("trajet_id")]
+trips_suscrib[,arr_med_avail_docks:=round(median(as.double(start_m_available_docks),na.rm=TRUE)),by=c("trajet_id")]
+
+trips_suscrib[,arr_moy_avail_bikes:=round(mean(start_m_available_bikes, na.rm=TRUE)),by=c("trajet_id")]
+trips_suscrib[,arr_med_avail_bikes:=round(median(as.double(start_m_available_bikes),na.rm=TRUE)),by=c("trajet_id")]
+
+trips_suscrib[,arr_moy_pct_full:=round(mean(start_m_pct_full, na.rm=TRUE),1),by=c("trajet_id")]
+trips_suscrib[,arr_med_pct_full:=round(median(as.double(start_m_pct_full),na.rm=TRUE),1),by=c("trajet_id")]
+
+trips_suscrib[,arr_moy_pct_full_av:=round(mean(start_m_pct_full_av, na.rm=TRUE),1),by=c("trajet_id")]
+trips_suscrib[,arr_med_pct_full_av:=round(median(as.double(start_m_pct_full_av),na.rm=TRUE),1),by=c("trajet_id")]
+
+trips_suscrib[,arr_moy_pct_in_service:=round(mean(start_m_pct_in_service, na.rm=TRUE),1),by=c("trajet_id")]
+trips_suscrib[,arr_med_pct_in_service:=round(median(as.double(start_m_pct_in_service),na.rm=TRUE),1),by=c("trajet_id")]
+
+
+trips_suscrib[,c("trip_id","trajet_name","start_hr","start_type_w","start_week","start_week_end","start_tr_hor_15","start_month","start_day","stop_month","stop_day","age","female","male","fem","hom","bike_id","trip_duration","start_m_total_docks","start_m_docks_in_service","start_m_available_docks","start_m_available_bikes","start_m_pct_full","start_m_pct_full_av","start_m_pct_in_service","stop_m_total_docks","stop_m_docks_in_service","stop_m_available_docks","stop_m_available_bikes","stop_m_pct_full","stop_m_pct_full_av","stop_m_pct_in_service"):=NULL]
+
+trajets_suscrib <- unique(trips_suscrib)
+
+rm(trips_suscrib)
+
+```
+
+
+```{r}
+# Correction de la NR
+# Plusieurs possibilités : imputation de la moyenne calculée sur l'heure pour la station
+# On impute avec dernière valeur connue pour la station
+# On fait la moyenne entre valeurs précédentes et suivantes 
+
+trajets_suscrib[,nonrep:=ifelse(is.na(dep_moy_total_docks),1,0)]
+table(trajets_suscrib[,nonrep])
+table(trajets_suscrib[nonrep==1,nb_trips])
+
+```
+
+```{r}
+# Liste des trajets concernés
+
+table(trajets_suscrib[nonrep==1,trajet_id])
+
+summary(trajets_suscrib[nonrep==0,arr_moy_avail_docks],useNA="ifany")
+```
+
+
+```{r}
+# 35 trajets sur la base pour laquelle des valeurs sont manquantes
+# dans la quasi-totalité des cas, il s'agit de trajet réalisé une seule fois
+# solution : les supprimer
+
+trajets_suscrib <- trajets_suscrib[nonrep==0,]
+
+trajets_suscrib[,nonrep:=NULL]
+```
+
+# Statistique descriptive
+```{r}
+summary(trajets_suscrib[,])
+```
+
+
+
+```{r}
+# Selection de table
+# on ne garde que les trajets avec > 1 trajet
+
+trajets <- as.data.frame(trajets_suscrib[nb_trips>1,-c("med_age","start_week_end_eff","start_week_eff","med_duration","dep_med_total_docks","dep_med_docks_in_service","dep_med_avail_docks","dep_med_avail_bikes","dep_med_pct_full","dep_med_pct_full_av","dep_moy_pct_full_av","dep_med_pct_in_service","arr_med_total_docks","arr_med_docks_in_service","arr_med_avail_docks","arr_med_avail_bikes","arr_med_pct_full","arr_moy_pct_full_av","arr_med_pct_full_av","arr_med_pct_in_service","pct_trips","pct_bike","arr_moy_pct_in_service","dep_moy_pct_in_service")])
+
+rm(trajets_suscrib)
+```
+
+
+
+
+#### Methode 1 : Classification ascendante hiérarchique
+
+```{r}
+# Standardisation des variables
+set.seed(12345)
+
+rownames(trajets)<-trajets$trajet_id
+trajets$trajet_id <- NULL
+
+library(cluster)               
+     
+  # Pas suffisamment de mémoire pour appeler hclust : on utilise donc agnes        
+  #   1. On centre et réduit les données car les variables n'ont pas la même échelle
+  #      Cela permet à ce que les variables ayant une forte variance n'aient plus d'influence
+  #      sur les résultats
+  #   2. On utilise le critère de Ward
+
+  # Mise en oeuvre
+cah_ward <- agnes(scale(trajets,center=T,scale=T),method="ward")
+
+
+  # On dessine le dendrogramme
+plot(cah_ward) 
+
+```
+
+```{r}
+ # Découpage de l'arbre
+  # On va choisir utiliser plusieurs critères
+
+
+cah_ward2<- as.hclust(cah_ward)
+plot(rev(cah_ward2$height),type="h",ylab="hauteurs")
+
+
+
+
+```
+
+
+```{r}
+# Mise en oeuvre des k-means
+  # On fixe à 20 le nb max d'iter... à 10 cela ne converge pas
+classe_cah3 <- kmeans(scale(trajets,center=T,scale=T),centers=4,nstart=4,iter.max=20)
+
+classe_cah3$withinss # Within cluster sum of squares by cluster:
+classe_cah3$tot.withinss #(totss+betweenss)
+classe_cah3$totss
+classe_cah3$betweenss
+classe_cah3$betw <- round((classe_cah3$betweenss/classe_cah3$totss),2)*100
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+# on réalise une petite ACP
+library(FactoMineR)
+
+res.pca <- PCA(trips_suscrib_fin[,-c("trajet")],scale.unit = TRUE)
+```
+```{r}
+res.pca
+```
+
+```{r}
+# Coefficient de corrélation entre chaxune des variables et les 4 premières CP
+round(res.pca$var$coord[,1:4],2)
+```
+
+```{r}
+# Décomposition de l'inertie par axe
+round(res.pca$eig,2)
+barplot(res.pca$eig[,1],main="Valeurs propres",names.arg=paste("dim",1:nrow(res.pca$eig)))
+```
+
+```{r}
+# Contribution des trajets à la construction des axes
+#round(res.pca$ind$contrib[,1:2],2)
+```
+
+```{r}
+# Contribution des variables à la contruction des axes
+round(res.pca$var$contrib[,1:4],2)
+```
+
+```{r}
+plot.PCA(res.pca,choix="var")
+plot.PCA(res.pca,choix="ind")
+```
+
+
+
+```{r}
+# Descri^ption des 4 premeirs axes
+dimdesc(res.pca,1:4)
+```
+
+
