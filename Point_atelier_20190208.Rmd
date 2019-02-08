@@ -7,26 +7,28 @@ output: html_document
 
 
 
-Pour la soutenance : faut que cela provienne de la même machine
+Pour la soutenance : faut que ce qu'on montre provienne de la même machine
 Faire une base Sqlite : cela ne chargera pas toute la base en RAM. Cela chargera en mémoire que les lignes indexées
 
 15 ou 20 min pour présenter
 Les problématiques de cuisine on s'en fout
 
-Soit on fait un objectif exploratoire
-Soit on fait un objectif de modélisation
+Soit on a un objectif exploratoire
+Soit on a un objectif de modélisation
 Expliquer la séquence de traitements (dont récupération des données)
 On fait une application pratique pour l'utilisateur
 Chacun parle
 
-Raconter l'histoire du projet
-Dans quelle mesure on est arrivé à notre objectif
-On a besoin de comprendre c'était quoi le projet et pendant tout le projet qu'est-ce qu'on a fait
+=> Raconter l'histoire du projet et le procesus de réalisation
+Dans quelle mesure on est arrivé à notre objectif ?
+On a besoin de comprendre c'était quoi le projet et pendant tout le projet ce qu'on a fait.
 
 Par exemple, on prédit et on montre comment sélectionner les résultats ou les variables
 
-RDS, compress=F
+=> S'assurer 
 utiliser shiny proxy par ex pour avoir des solutions différentes
+Le fait de ne pas compresser la base sur le disque fait que le chargement est plus rapide dans l'application (par défaut quand on fait saveRDS, compress=T, il faut penser à mettre saveRDS=F). 
+Ce qu'on pourrait faire: c'est faire en sorte par exemple de supprimer la base de données de l'onglet (rm()+gc() ) quand on appelle l'onglet 2
 
 
 Projet :
@@ -40,29 +42,6 @@ Faire une base en considérant seulement l'année 2017
 Garde la sélection des jours pour tout le monde
 Garde la sélection des heures selon l'onglet 
 
-Réfléchir sur les perspectives
+Réfléchir sur les perspectives...
 
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
