@@ -34,9 +34,10 @@ shinyUI(fluidPage(
             checkboxInput("Sun", "Sunday", FALSE),
             sliderInput("nb_clusters",
                         "Number of clusters:",
-                        min = 1,
-                        max = 16,
-                        value = 12),
+                        min = 1L,
+                        max = 16L,
+                        value = 12L,
+                        step = 1L),
             sliderInput("low_trips_thd",
                         "Regroup stations with less than # trips:",
                         min = 10,
@@ -47,12 +48,29 @@ shinyUI(fluidPage(
                         "Alpha:",
                         min = 0,
                         max = 1,
-                        value = .1)
+                        value = .1),
+            sliderInput("hovered_map_zoom",
+                        "Map zoom level (hovered):",
+                        min = 10L,
+                        max = 20L,
+                        value = 15L,
+                        step = 1L)
+            
         ),
         
         # Show a plot of the generated distribution
         mainPanel(
           verbatimTextOutput('debugText', placeholder = TRUE),
+          fluidRow(
+            column(
+              6,
+              leafletOutput('stationMap')#, height = 300)
+              ),
+            column(
+              6,
+              plotOutput("stationtripratepPlot")
+            )
+          ),
 #          tableOutput('latlonghoverDT'),
           withSpinner(plotlyOutput("latlongclusterPlot")),
           withSpinner(plotlyOutput("tripratePlot")),

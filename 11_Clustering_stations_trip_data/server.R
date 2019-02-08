@@ -15,7 +15,7 @@ library(data.table)
 library(leaflet)
 library(tictoc)
 library(plotly)
-library(DT)
+library(scales)
 
 
 ## We load data outside of shinyServer function, so as it is loaded only once
@@ -37,10 +37,10 @@ wdays <-
       , 
       .N, 
       .(wday_n, wday_abr)
-      ][
-        order(wday_n), 
-        .(wday_n, wday_abr)
-        ]
+    ][
+      order(wday_n), 
+      .(wday_n, wday_abr)
+    ]
 
 if(length(list.files('.', pattern = 'station_movements.rds'))){
   station_movements <- read_rds('./station_movements.rds')
@@ -132,9 +132,22 @@ print(toc())
 tic()
 print("Done creating features")
 
-
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Define server logic required to draw a histogram
 shinyServer(function(input, output) {
+  hover_station_id <- reactiveVal(0)
+  
+  reactive_hover <- observe({
+    eventdata <- event_data("plotly_hover", source = 'latlongcluster')
+    print(str(eventdata))
+    d <- reactiveClustering()
+    print('output$stationtripratepPlot')
+    if((!is.null(eventdata)) && nrow(eventdata) && "key" %in% colnames(eventdata)){
+      print(paste("reactive_hover(", eventdata$key, ")"))
+      hover_station_id(eventdata$key)
+    }
+  })
+  
   reactiveClustering <- reactive({
     input$recompute
     print(wdays[c(input$Sun, input$Mon, input$Tue, input$Wed, input$Thu, input$Fri, input$Sat)])
@@ -179,6 +192,7 @@ shinyServer(function(input, output) {
    # station_movements_kmeans_input %<>% na.omit()
     
     km_cent <- input$nb_clusters # PARAMETRE A FAIRE VARIER
+    cluster_palette <- hue_pal()(km_cent)
     classifST <- kmeans(station_movements_kmeans_input[, 2:ncol(station_movements_kmeans_input)], centers = km_cent, algorithm = input$kmeansAlgo) 
     stationsKM <- cbind(station_movements_kmeans_input, classeKM = factor(classifST$cluster))
     print(paste("Nb_cluster=", km_cent))
@@ -195,7 +209,8 @@ shinyServer(function(input, output) {
       stationsKM = stationsKM,
       coor_st = coor_st,
       st_dn = st_dn,
-      classifST = classifST
+      classifST = classifST,
+      cluster_palette = cluster_palette
     ) 
   })
 
@@ -208,7 +223,7 @@ shinyServer(function(input, output) {
     })
 
     output$debugText <- renderText({
-      eventdata <- event_data("plotly_hover", source = 'latlongcluster')#, source = "source")
+      eventdata <- event_data("plotly_hover", source = 'latlongcluster')
       #print('got hover')
       print(str(eventdata))
       validate(need(!is.null(eventdata) & 'key' %in% colnames(eventdata), "Hover over the chart"))
@@ -216,7 +231,113 @@ shinyServer(function(input, output) {
       d <- reactiveClustering()
       d$stations_visu[d$st_dn[, .(totalNlog10 = as.integer(log10(pmax(1, totalN, na.rm = TRUE))), totalN, id = station_id)], on = 'id'][id %in% eventdata$key] %>% as.character
     })    
+
+    # Generate a map for each user
+    m <- 
+      leaflet() %>%
+      addTiles() %>%
+      setView(lng = coor_st %>% pull(longitude) %>% mean(), lat = coor_st %>% pull(latitude) %>% mean() , zoom=10)
     
+    # Update the map (do not recreate a new map)
+    output$stationMap <- renderLeaflet({
+      eventdata <- event_data("plotly_hover", source = 'latlongcluster')
+      #validate(need(is.null(eventdata) || "key" %in% colnames(eventdata)))
+      d <- reactiveClustering()
+      hovered_station <- 
+        d$stations_visu[d$st_dn[, .(totalNlog10 = as.integer(log10(pmax(1, totalN, na.rm = TRUE))), totalN, id = station_id)], on = 'id'][id %in% eventdata$key]
+      print('output$stationMap')
+      
+      mm <- m
+      if(nrow(hovered_station)){
+        lat <- hovered_station %>% pull(latitude)
+        lon <- hovered_station %>% pull(longitude)
+        mm <-
+          m %>%
+            setView(lng = lon, lat = lat, zoom = input$hovered_map_zoom) %>%
+            addCircleMarkers(lng = d$stations_visu$longitude, lat = d$stations_visu$latitude, color = d$cluster_palette[d$stations_visu$classeKM], radius = 5, opacity = 1) %>% 
+            addCircleMarkers(lng = lon, lat = lat, color = 'black', opacity = 1)
+      } else {
+        mm <-
+          m %>% 
+            addCircleMarkers(lng = coor_st$longitude, lat = coor_st$latitude, color = 'gray', radius = 2) 
+      }
+      mm
+    })
+    
+    observe({
+      hover_station_id()
+    })
+    
+    output$stationtripratepPlot <- renderPlot({
+      #eventdata <- event_data("plotly_hover", source = 'latlongcluster')
+      #print(str(eventdata))
+      hv_st_id <- hover_station_id()
+      d <- reactiveClustering()
+      print(paste('output$stationtripratepPlot', hv_st_id))
+      
+      p <- NULL
+      
+      #if((!is.null(eventdata)) && nrow(eventdata) && "key" %in% colnames(eventdata)){
+      if(hv_st_id > 0){
+        hover_class <- d$stationsKM[station_id == hv_st_id][, classeKM]
+        (
+          d$station_movements_subset[hrtf, on = 'hrtf'][d$stationsKM[,.(station_id, classeKM)], on = 'station_id'][classeKM == hover_class] %>% {
+            print(str(.))
+            print(str(. %>% filter(station_id == hv_st_id)))
+            ggplot(data = ., aes(as.numeric(hr), rate)) +
+            geom_line(
+              aes(group = interaction(station_id, type)),
+              alpha = input$alpha,
+              color = d$cluster_palette[hover_class]
+            ) +
+            geom_line(
+              data = . %>% filter(station_id == hv_st_id),
+              aes(group = interaction(station_id, type)),
+              alpha = 1,
+              size = 1,
+              color = d$cluster_palette[hover_class]
+            ) +
+            geom_line(
+              data = 
+                d$classifST$centers %>% 
+                melt(value.name = 'rate') %>% 
+                mutate(classeKM = as.factor(Var1), hrtf = Var2) %>% 
+                left_join(hrtf %>% as.tibble(), by = 'hrtf') %>% 
+                filter(classeKM == hover_class),
+              aes(group = interaction(classeKM, type))
+            ) +
+            # Scale to 5-23 0-4. as.numeric(hr) return 1 (not 0) for the first hour (i.e. night_thd)
+            scale_x_continuous(labels = function(x) { (x + night_thd - 1) %% 24 } ) +
+            labs(x = 'hour', y = 'pct of daily a/d (+ arrival, - departures)') +
+            ylim(-.2, .2)
+          }
+        ) -> p
+      } else {
+        p <-
+          d$station_movements_subset[hrtf, on = 'hrtf'][d$stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
+            ggplot(aes(as.numeric(hr), rate)) +
+            geom_line(
+              aes(group = interaction(station_id, type), color = classeKM),
+              alpha = input$alpha
+            ) +
+            geom_line(
+              data = 
+                d$classifST$centers %>% 
+                melt(value.name = 'rate') %>% 
+                mutate(classeKM = as.factor(Var1), hrtf = Var2) %>% 
+                left_join(hrtf %>% as.tibble(), by = 'hrtf'),
+              aes(group = interaction(classeKM, type))
+            ) +
+            facet_wrap(~classeKM) +
+            # Scale to 5-23 0-4. as.numeric(hr) return 1 (not 0) for the first hour (i.e. night_thd)
+            scale_x_continuous(labels = function(x) { (x + night_thd - 1) %% 24 } ) +
+            labs(x = 'hour', y = 'pct of daily a/d (+ arrival, - departures)') +
+            ylim(-.2, .2)
+      }
+      p
+    })
+    
+        
     output$latlonghoverDT <- renderTable({
       eventdata <- event_data("plotly_hover", source = 'latlongcluster')#, source = "source")
       #print('got hover')
@@ -226,6 +347,7 @@ shinyServer(function(input, output) {
       d <- reactiveClustering()
       d$stations_visu[d$st_dn[, .(totalNlog10 = as.integer(log10(pmax(1, totalN, na.rm = TRUE))), totalN, id = station_id)], on = 'id'][id %in% eventdata$key]
     })
+    
     output$latlongclusterPlot <- renderPlotly({
         d <- reactiveClustering()
         (
@@ -249,7 +371,6 @@ shinyServer(function(input, output) {
         d <- reactiveClustering()
         (
           d$station_movements_subset[hrtf, on = 'hrtf'][d$stationsKM[,.(station_id, classeKM)], on = 'station_id'] %>% 
-#        (d$station_movements_kmeans_input %>% melt('station_id', variable.name = 'hrtf', value.name = 'rate'))[hrtf, on='hrtf'][stationsKM[,.(station_id, classeKM = classeKM)], on = 'station_id'] %>% 
             ggplot(aes(as.numeric(hr), rate)) +
             geom_line(
                 aes(group = interaction(station_id, type), color = classeKM),
