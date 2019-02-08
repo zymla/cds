@@ -1,0 +1,68 @@
+---
+title: "Projet_20190208"
+output: html_document
+---
+
+
+
+
+
+Pour la soutenance : faut que cela provienne de la même machine
+Faire une base Sqlite : cela ne chargera pas toute la base en RAM. Cela chargera en mémoire que les lignes indexées
+
+15 ou 20 min pour présenter
+Les problématiques de cuisine on s'en fout
+
+Soit on fait un objectif exploratoire
+Soit on fait un objectif de modélisation
+Expliquer la séquence de traitements (dont récupération des données)
+On fait une application pratique pour l'utilisateur
+Chacun parle
+
+Raconter l'histoire du projet
+Dans quelle mesure on est arrivé à notre objectif
+On a besoin de comprendre c'était quoi le projet et pendant tout le projet qu'est-ce qu'on a fait
+
+Par exemple, on prédit et on montre comment sélectionner les résultats ou les variables
+
+RDS, compress=F
+utiliser shiny proxy par ex pour avoir des solutions différentes
+
+
+Projet :
+Présentation du projet et objectif
+Onglet 1 : Clustering de stations
+Onglet 2 : Clustering de trajets
+Onglet 3 : Graphes / Communautés de stations
+
+
+Faire une base en considérant seulement l'année 2017
+Garde la sélection des jours pour tout le monde
+Garde la sélection des heures selon l'onglet 
+
+Réfléchir sur les perspectives
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
