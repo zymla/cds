@@ -1,11 +1,11 @@
 ---
 title: "Graph mining"
 author: "Magda Bolewska"
-date: "6 fÃ©vrier 2019"
+date: "6 février 2019"
 output: html_document
 ---
 
-## 1 - Importation de donnÃ©es et traitements prÃ©liminaires
+## 1 - Importation de données et traitements préliminaires
 
 ```{r}
 library(data.table)
@@ -24,22 +24,14 @@ trips_filename <- list.files('data_raw', pattern = 'divvy_trips_[0-9]{4}(_[0-9]{
 trips_filename
 trips <- fread(trips_filename, na.strings = c(""))
 
-trips[
-  , 
-  `:=`(
-    start_time = as_datetime(start_time),
-    stop_time = as_datetime(stop_time)
-  ), 
-  ]
-
-trips[, weekday := lubridate::wday(start_time, label=TRUE, abbr = FALSE)]
-trips[, hr_depart := hour(start_time)]
+trips$from_station_id <- as.character(trips$from_station_id)
+trips$to_station_id <- as.character(trips$to_station_id)
 
 ```
 
 
 
-# Attribution du nom et des coordonnÃ©es gÃ©ographiques uniques Ã  chaque station
+# Attribution du nom et des coordonnées géographiques uniques à chaque station
 ```{r}
 
 nc_stations <- trips[!duplicated(trips[, from_station_id]),.(from_station_id,from_station_name,from_latitude,from_longitude) ]
@@ -59,9 +51,12 @@ setnames(nc_stations, old = c("from_station_id", "from_station_name","from_latit
 
 trips <- merge(trips,nc_stations,by= c("to_station_id"))
 
-trips$from_station_id <- as.character(trips$from_station_id)
-trips$to_station_id <- as.character(trips$to_station_id)
+
 summary(trips)
+head(nc_stations)
+
+setnames(nc_stations, old = c("to_station_id", "to_station_name","to_latitude","to_longitude"), 
+         new = c("station_id","station_name","latitude","longitude"))
 
 ```
 
@@ -76,44 +71,47 @@ co_occ_oriented <- trips[,.N, by=.(from_station_id,to_station_id)][N>=nb_min]
 
 
 ```{r}
-colnames(co_occ_oriented)
+head(co_occ_oriented)
 ```
 
-# Construction du graphe orientÃ© Ã  partie de la matrice de co-occurences
+# Construction du graphe orienté à partir de la matrice de co-occurences
 ```{r}
 g <- graph.data.frame(co_occ_oriented,directed = T)
 ```
 
 
-# PremiÃ¨re visualisation
+# Première visualisation
 ```{r}
 visIgraph(g)
 ```
 
 
-# Est-ce que le graphe est connectÃ© ? FALSE
+# Est-ce que le graphe est connecté ? FALSE
 ```{r}
 is.connected(g)
 ```
 
-# Distribution des composantes connectÃ©es fortement (tous les noeuds peuvent Ãªtre reliÃ©s dans les deux sens)
+# Distribution des composantes connectées fortement (tous les noeuds peuvent être reliés dans les deux sens)
 ```{r}
 components=components(g,"strong")
 table(components$csize)
 ```
 
-# Composantes faiblement connexes (connection faible ie le graph non orientÃ© sous-jacent est connexe)
+# Composantes faiblement connexes (connection faible ie le graph non orienté sous-jacent est connexe)
 ```{r}
 components=components(g_tot,"weak")
 table(components$csize)
 ```
 
-On travaille par la suite sur le graphe orientÃ© non connectÃ©
+On travaille par la suite sur le graphe orienté non connecté
 
 
-## 3 - ParamÃ¨trage du graphe 
+## 3 - Paramètrage du graphe 
+# Sommets
 ```{r}
 vertices <- names(V(g))
+vertices_info <- nc_stations[station_id %in% vertices]
+head(vertices_info)
 ```
 On pourrait ajouter la taille des noeuds = nombre de bornes
 
@@ -130,23 +128,27 @@ names(edges_df) <- c("from_station_id","to_station_id")
 head(edges_df)
 ```
 
+
+# En cours : il faut attribuer les noms
 ```{r}
 setkey(co_occ_oriented,from_station_id,to_station_id)
-E(g)$weight=co_occ_oriented[edges_df]$N
+E(g)$weight <- co_occ_oriented[edges_df]$N
+
 visIgraph(g)
+
 ```
 
 
 
-## 4 - MÃ©triques globales
+## 4 - Métriques globales
 
-# DensitÃ© : nombre de liens / nombre de liens possibles
+# Densité : nombre de liens / nombre de liens possibles
 
 ```{r}
 graph.density(g)
 ```
 
-# TransitivitÃ©
+# Transitivité
 ```{r}
 transitivity(g)
 ```
@@ -162,7 +164,7 @@ mean(degree(g))
 average.path.length(g)
 ```
 
-# La plus grande distance observÃ©e entre deux noeuds du graphe ie on ignore les noeuds non connectÃ©s
+# La plus grande distance observée entre deux noeuds du graphe ie on ignore les noeuds non connectés
 ```{r}
 E(g)$weight=1
 diametre=diameter(g) 
@@ -170,18 +172,18 @@ diametre
 ```
 
 
-## 5 - MÃ©triques locales
+## 5 - Métriques locales
 
-# Avec les poids Ã  1
+# Avec les poids à 1
 ```{r}
 E(g)$weight <- 1
 centrality<-data.frame(index=V(g)$name, 
                        degre=degree(g,mode = "all"),#nombre de voisins directs
-                       degre_in=degree(g,mode = "in"),#nombre de voisins qui Ã©mettent un flux vers le noeud
-                       degre_out=degree(g,mode = "out"),#nombre de voisins qui reÃ§oivent un flux du noeud
+                       degre_in=degree(g,mode = "in"),#nombre de voisins qui émettent un flux vers le noeud
+                       degre_out=degree(g,mode = "out"),#nombre de voisins qui reçoivent un flux du noeud
 
-                       inter=betweenness(g), #intermÃ©diaritÃ© ie nombre de fois que le noeud sert de plus court chemin
-                       prox=closeness(g), #proximitÃ©, inverse de la distance moyenne du noeud vers n'importe quel autre
+                       inter=betweenness(g), #intermédiarité ie nombre de fois que le noeud sert de plus court chemin
+                       prox=closeness(g), #proximité, inverse de la distance moyenne du noeud vers n'importe quel autre
                        trans=transitivity(g,type="local"),
                        stringsAsFactors = F) #coefficient de clustering, on compte le nombre de triangles ie xRy & yRz => xRz
 ```
@@ -191,7 +193,7 @@ head(centrality)
 ```
 OK
 
-# Avec les poids Ã©gaux au nombre de trajets
+# Avec les poids égaux au nombre de trajets
 ```{r}
 E(g)$weight <- co_occ_oriented[edges_df]$N
 centrality_w<-data.frame(index=V(g)$name,
@@ -199,9 +201,9 @@ centrality_w<-data.frame(index=V(g)$name,
                           degre_pondere_out=graph.strength(g,mode="out"), 
                           degre_pondere_in=graph.strength(g,mode="in"), 
                           degre_pondere=graph.strength(g,mode="all"), 
-                          inter_w=betweenness(g), #intermÃ©diaritÃ© pondÃ©rÃ©e
-                          prox_w=closeness(g),#proximitÃ© pondÃ©rÃ©e
-                          trans_w=transitivity(g, type="local"))#coefficient de clustering pondÃ©rÃ©
+                          inter_w=betweenness(g), #intermédiarité pondérée
+                          prox_w=closeness(g),#proximité pondérée
+                          trans_w=transitivity(g, type="local"))#coefficient de clustering pondéré
 ```
 
 ```{r}
@@ -227,9 +229,9 @@ OK
 ```{r}
 
 # mesure - PARAMETRE A FAIRE VARIER
-mesure <- centrality$degre
+#mesure <- centrality$degre
 # mesure <- centrality$degre_pondere
-# mesure <- centrality$prox
+ mesure <- centrality$prox
 # mesure <- centrality$inter
 # mesure <- centrality$trans[!is.nan(centrality$trans)]
 
@@ -248,7 +250,46 @@ visFiness
 ```
 
 
-## 6 - Analyse des communautÃ©s
-A faire :)
+## 6 - Analyse des communautés
+
+# Recherche des cliques
+
+```{r}
+largest_cliques <- largest_cliques(g)[[1]]
+print(paste("La plus grande clique (100% connectée) contient",length(largest_cliques),"stations."))
+```
+
+
+# Optimisation de la modularité - algorithme de Louvain
+
+```{r}
+c <- cluster_louvain(as.undirected(g)) # étude sur le graphe non orienté
+# weights : Optional positive weight vector. If the graph has a weight edge attribute, then this is used by default. Supply NA here if the graph has a weight edge attribute, but you want to ignore it. Larger edge weights correspond to stronger connections.
+
+modularity(c)
+```
+
+Nombre de groupes
+```{r}
+length(unique(c$membership))
+```
+
+Distribution de la taille des groupes
+```{r}
+table(c$membership)
+```
+
+visualisation
+```{r}
+col_split <- c$membership
+ramp_pal <- colorRampPalette(c("red","yellow","springgreen","royalblue"))
+
+
+color_vector <- ramp_pal(uniqueN(col_split))
+
+V(g)$color=color_vector[col_split]
+visFiness <- visIgraph(g, idToLabel = FALSE)
+visFiness
+```
 
 
