@@ -145,7 +145,16 @@ shinyServer(function(input, output) {
     if((!is.null(eventdata)) && nrow(eventdata) && "key" %in% colnames(eventdata)){
       print(paste("reactive_hover(", eventdata$key, ")"))
       hover_station_id(eventdata$key)
+    } else {
+      isolate({
+        last_hover_station_id <- hover_station_id()
+        if(last_hover_station_id > 0){
+          print('Back to all cluster triprate chart')
+          hover_station_id(0)
+        }
+      })
     }
+    
   })
   
   reactiveClustering <- reactive({
