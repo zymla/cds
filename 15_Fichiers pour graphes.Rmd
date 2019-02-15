@@ -1,0 +1,73 @@
+---
+title: "Graphes - Préparation des fichiers pour Shiny"
+author: "Magda Bolewska"
+date: "15 février 2019"
+output: html_document
+---
+
+
+```{r}
+rm(list=ls())
+library(data.table)
+library(lubridate)
+library(magrittr)
+library(stringr)
+```
+
+
+## PREPARATION DES FICHIERS POUR SHINY
+
+# Informations sur les trajets
+```{r}
+
+rm(trips)
+
+trips_filename <- list.files('data_raw', pattern = 'divvy_trips_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
+trips_filename
+
+trips <- fread(trips_filename, na.strings = c(""))
+
+trips$from_station_id <- as.character(trips$from_station_id)
+trips$to_station_id <- as.character(trips$to_station_id)
+
+trips[, weekday := lubridate::wday(start_time, label=TRUE, abbr = FALSE)]
+trips[, hr_depart := hour(as_datetime(start_time))]
+
+fichier_graphe <- trips[,.N, by= . (from_station_id, to_station_id, weekday, hr_depart )]
+
+rm(trips, trips_filename)
+```
+La base des trajets de 2017 a 3 829 000 lignes.
+
+
+
+# Informations sur les stations
+```{r}
+rm(stations)
+
+stations_filename <- list.files('data_raw', pattern = 'divvy_stations_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
+stations_filename
+stations <- fread(stations_filename, na.strings = c("")) 
+
+setorder(stations,-timestamp)
+
+fichier_stations <- stations[
+  total_docks != 0 & latitude != 0 & longitude != 0, .(id, total_docks, station_name, longitude, latitude)
+  ][
+    ,head(.SD,1), by = .(id)
+  ]
+
+fichier_stations$id <- as.character(fichier_stations$id)
+fichier_stations$total_docks <- as.integer(fichier_stations$total_docks)
+
+rm(stations, stations_filename)
+
+```
+La base des stations de 2017 a 30 461 901 lignes.
+
+# Fichiers qui seront utilisés dans Shiny
+```{r}
+fwrite(fichier_graphe, "graphes_matrice.csv")
+fwrite(fichier_stations, "graphes_stations.csv")
+rm(fichier_graphe,fichier_stations)
+```
