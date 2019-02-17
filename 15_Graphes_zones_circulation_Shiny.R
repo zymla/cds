@@ -1,8 +1,6 @@
 #####################################################################################
-# En cours                                                                          #
-# Etude de communautés (zones de circulation) avec l'algorithme de Louvain.         #
-# Si on sélectionne une station sur le graphe, un popup s'affiche sur la carte et   #
-# les informations sur la station s'affichent au-dessous du graphe                  #
+# Lorsqu'on sélectionne une station sur le graphe, un popup s'affiche sur la carte  #
+# et les informations sur la station s'affichent au-dessous du graphe               #
 #####################################################################################
 
 
@@ -13,6 +11,7 @@ library(igraph)
 library(visNetwork)
 library(leaflet)
 library(htmltools)
+library(shinyWidgets)
 
 # Lecture et mise en forme de fichiers
 fichier_graphe <- fread("graphes_matrice.csv")
@@ -23,7 +22,8 @@ fichier_stations$id <- as.character(fichier_stations$id)
 print("FICHIERS IMPORTES")
 
 
-ui <- fluidPage(titlePanel("Zones de circulation"),
+ui <- fluidPage(titlePanel(h1(id="Titre","Réseau Divvy")),
+                tags$style(HTML("#Titre{color: #0B0B61; font-weight: 900;}")),    
         sidebarLayout(
           sidebarPanel(
             checkboxGroupInput("Jours", "Jours",
@@ -40,19 +40,49 @@ ui <- fluidPage(titlePanel("Zones de circulation"),
                         max = 24, 
                         value = c(0, 24),
                         width = "100%"),
+            radioButtons("methode", "Information à afficher :",
+                         choices = list("Degré entrant" = 1,
+                                        "Degré sortant" = 2,
+                                        "Communautés - Algorithme de Louvain" = 3, 
+                                        "Communautés - Décomposition spectrale" = 4), 
+                         selected = 1),
+            
             width = 3
            
           ),
           mainPanel( 
+            setBackgroundColor("#EBEBEB"),
+            
             fluidRow(
+              
               column(width = 7,
                      fluidRow(visNetworkOutput('Graphe_trajets')),
-                     fluidRow(textOutput('txtStation')),
-                     fluidRow(textOutput('txtBornes')),
-                     fluidRow(textOutput('txtLatitude')),
-                     fluidRow(textOutput('txtLongitude'))),
+                     br(),
+                     br(),
+                     br(),
+                     column(7,""),
+                     column(5,
+                            # Un peu de CSS
+                            # https://www.w3.org/Style/Examples/007/fonts.fr.html
+                            # https://shiny.rstudio.com/articles/css.html
+                            tags$style(type = "text/css", "#txtStation {font-family: Georgia, serif; font-weight: 800; color: #0B0B61}"),
+                            tags$style(type = "text/css", "#txtBornes {font-family: Georgia, serif; color: #0B0B61}"),
+                            tags$style(type = "text/css", "#txtLatitude {font-family: Georgia, serif; color: #0B0B61}"),
+                            tags$style(type = "text/css", "#txtLongitude {font-family: Georgia, serif; color: #0B0B61}"),
+                            tags$style(type = "text/css", "#txtDeparts {font-family: Georgia, serif; color: #0B0B61}"),
+                            tags$style(type = "text/css", "#txtArrivees {font-family: Georgia, serif; color: #0B0B61}"),
+                            fluidRow(textOutput('txtStation')),
+                            fluidRow(textOutput('txtBornes')),
+                            fluidRow(textOutput('txtLatitude')),
+                            fluidRow(textOutput('txtLongitude')), 
+                            fluidRow(textOutput('txtDeparts')),
+                            fluidRow(textOutput('txtArrivees'))
+                            )
+                     ),
               column(width = 5,
-                     fluidRow(leafletOutput('Carte_stations',height="800px"))) )
+                     tags$style(type = "text/css", "#Carte_stations {height: calc(80vh) !important;}"),
+                     leafletOutput('Carte_stations'))
+            ) 
           )
         )
 )
@@ -60,19 +90,21 @@ ui <- fluidPage(titlePanel("Zones de circulation"),
 server <- function(input, output) {
   
   freact <- reactive({
-  jours <- c("lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche") 
-  hr_depart_min <- 0 
-  hr_depart_max <- 24 
   
   co_occ_oriented <- fichier_graphe[
-    weekday %in% input$Jours & hr_depart <= input$Choix_heure[2] & hr_depart >= input$Choix_heure[1] & to_station_id != from_station_id,    .(from_station_id, to_station_id, N)
+    weekday %in% input$Jours & hr_depart <= input$Choix_heure[2] & hr_depart >= input$Choix_heure[1] & to_station_id != from_station_id, .(from_station_id, to_station_id, N)
     ][
       ,sum(N), by = .(from_station_id,to_station_id)
       ]
   names(co_occ_oriented) <- c("from_station_id","to_station_id","N")
   
+  
+  # Comptage de departs et arrivées
+  departs <- co_occ_oriented[,sum(N), by = .(from_station_id)]
+  arrivees <- co_occ_oriented[,sum(N), by = .(to_station_id)]
 
-  N_min <- length(input$Jours) * 365 / 7 * (hr_depart_max - hr_depart_min) / 24 
+  # Elimination de trajets très peu fréquents pour visualisation
+  N_min <- length(input$Jours) * (input$Choix_heure[2] - input$Choix_heure[1]) / 24 * 52 
   co_occ_oriented <- co_occ_oriented[N >= N_min]
   
   # Construction du graphe orienté
@@ -108,16 +140,48 @@ server <- function(input, output) {
   head(noms_stations)
   V(g)$label <- noms_stations$station_name
   
-  # Analyse de communautés avec l'algorithme de Louvain
-  c <- cluster_louvain(as.undirected(g))
+  # Calcul des métriques locales
+  centrality_w <- data.frame(index=V(g)$name,
+                             degre_pondere_out=graph.strength(g,mode="out"), 
+                             degre_pondere_in=graph.strength(g,mode="in"))
   
-  # Visualisation avec un graphe
-  col_split <- c$membership
-  ramp_pal <- colorRampPalette(c("red","yellow","springgreen","royalblue"))
-  color_vector <- ramp_pal(uniqueN(col_split))
-  V(g)$color <- color_vector[col_split]
+  # Degré entrant
+  if(input$methode == 1){ 
+    col_split <- cut(centrality_w$degre_pondere_in, breaks = unique(quantile(centrality_w$degre_pondere_in,0:9/9)), include.lowest = T)
+    ramp_pal <- colorRampPalette(c("red","yellow","springgreen","royalblue"))
+    color_vector <- ramp_pal(length(levels(col_split)))
+    V(g)$color <- color_vector[col_split]
+  }
   
-  # Visualisation sur une carte
+  # Degré sortant
+  else if(input$methode == 2){
+    col_split <- cut(centrality_w$degre_pondere_out, breaks = unique(quantile(centrality_w$degre_pondere_out,0:9/9)), include.lowest = T)
+    ramp_pal <- colorRampPalette(c("red","yellow","springgreen","royalblue"))
+    color_vector <- ramp_pal(length(levels(col_split)))
+    V(g)$color <- color_vector[col_split]
+  }
+  
+  
+  # Clustering avec l'algorithme de Louvain
+  else if(input$methode == 3){
+    c <- cluster_louvain(as.undirected(g))
+    col_split <- c$membership
+    ramp_pal <- colorRampPalette(c("red","yellow","springgreen","royalblue"))
+    color_vector <- ramp_pal(uniqueN(col_split))
+    V(g)$color <- color_vector[col_split]
+  }
+  
+  # Clustering spectral
+  else if(input$methode == 4){
+    c <- cluster_leading_eigen(as.undirected(g))
+    
+    # Visualisation avec un graphe
+    col_split <- c$membership
+    ramp_pal <- colorRampPalette(c("red","yellow","springgreen","royalblue"))
+    color_vector <- ramp_pal(uniqueN(col_split))
+    V(g)$color <- color_vector[col_split]
+  }
+
   
   visu_stations <- data.table(V(g)$name, V(g)$color, V(g)$label, V(g)$size)
   setnames(visu_stations, old = c("V1", "V2","V3","V4"), new = c("id", "station_color","station_name","total_docks"))
@@ -125,7 +189,7 @@ server <- function(input, output) {
   coord_geo <- fichier_stations[,.(id, latitude, longitude)]
   visu_stations <- merge(visu_stations,coord_geo, by="id")
   
-  return(list(visu_stations,g))
+  return(list(visu_stations, g, departs, arrivees))
   
   })
   
@@ -139,7 +203,7 @@ server <- function(input, output) {
         label = ~ paste("Station : ", station_name, sep = ""), 
         opacity = 1)
     
-    if(nrow(fichier_stations[which(myNode$selected == fichier_stations$id),])!=0){
+   if(nrow(fichier_stations[which(myNode$selected == fichier_stations$id),])!=0){
       m <- m %>%
       addPopups(fichier_stations[id == myNode$selected]$longitude, 
                 fichier_stations[id == myNode$selected]$latitude, 
@@ -177,6 +241,7 @@ server <- function(input, output) {
     } else {}
   }) 
   
+  
   output$txtBornes = renderText({
     if(nrow(fichier_stations[which(myNode$selected == fichier_stations$id),])!=0){
       paste0("Nombre de bornes : ", fichier_stations[id == myNode$selected]$total_docks)
@@ -192,6 +257,22 @@ server <- function(input, output) {
   output$txtLongitude = renderText({
     if(nrow(fichier_stations[which(myNode$selected == fichier_stations$id),])!=0){
       paste0("Longitude : ", fichier_stations[id == myNode$selected]$longitude)
+    } else {}
+  }) 
+  
+  output$txtDeparts = renderText({
+    if(nrow(freact()[[3]][which(myNode$selected == freact()[[3]]$from_station_id),])!=0){
+      paste0("Nombre de départs par heure : ", 
+             round((freact()[[3]][from_station_id == myNode$selected]$V1 / (length(input$Jours) * (input$Choix_heure[2] - input$Choix_heure[1]) * 52)),1)
+             )
+    } else {}
+  }) 
+  
+  output$txtArrivees = renderText({
+    if(nrow(freact()[[4]][which(myNode$selected == freact()[[4]]$to_station_id),])!=0){
+      paste0("Nombre d'arrivées par heure : ", 
+             round((freact()[[4]][to_station_id == myNode$selected]$V1 / (length(input$Jours) * (input$Choix_heure[2] - input$Choix_heure[1]) * 52)),1)
+      )
     } else {}
   }) 
   
