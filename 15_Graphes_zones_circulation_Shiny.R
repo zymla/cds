@@ -71,6 +71,7 @@ ui <- fluidPage(titlePanel(h1(id="Titre","Réseau Divvy")),
                             tags$style(type = "text/css", "#txtLongitude {font-family: Georgia, serif; color: #0B0B61}"),
                             tags$style(type = "text/css", "#txtDeparts {font-family: Georgia, serif; color: #0B0B61}"),
                             tags$style(type = "text/css", "#txtArrivees {font-family: Georgia, serif; color: #0B0B61}"),
+                            tags$style(type = "text/css", "#txtMesure {font-family: Georgia, serif; color: #0B0B61}"),
                             fluidRow(textOutput('txtStation')),
                             fluidRow(textOutput('txtBornes')),
                             fluidRow(textOutput('txtLatitude')),
@@ -214,7 +215,7 @@ server <- function(input, output) {
   })
   
   output$Graphe_trajets <- renderVisNetwork({
-        visIgraph(freact()[[2]], idToLabel = FALSE) %>%
+        visIgraph(freact()[[2]], idToLabel = FALSE, randomSeed = 123) %>%
           visEvents(select = "function(nodes) {
                 Shiny.onInputChange('current_node_id', nodes.nodes);
                 ;}")
@@ -226,6 +227,13 @@ server <- function(input, output) {
     myNode$selected <<- input$current_node_id
   })
   
+  observeEvent(input$Carte_stations_marker_click, { 
+    myNode$selected <- as.character(fichier_stations[
+        input$Carte_stations_marker_click$lat == latitude &
+          input$Carte_stations_marker_click$lng == longitude,
+        .(id)])
+  })
+  
   observeEvent(input$Jours, {
     myNode$selected <<- ''
   })
@@ -233,7 +241,6 @@ server <- function(input, output) {
   observeEvent(input$Choix_heure, {
     myNode$selected <<- ''
   })
-  
   
   output$txtStation = renderText({
     if(nrow(fichier_stations[which(myNode$selected == fichier_stations$id),])!=0){
