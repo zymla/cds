@@ -40,7 +40,13 @@ ui <- fluidPage(titlePanel(h1(id="Titre","Réseau Divvy")),
                         max = 24, 
                         value = c(0, 24),
                         width = "100%"),
-            radioButtons("methode", "Information à afficher :",
+            sliderInput("Nb_tr_min", label = "Nombre minimum de trajets par heure", 
+                        min = 0, 
+                        max = 0.2, 
+                        value = 0.05,
+                        step = 0.05,
+                        width = "100%"),
+            radioButtons("methode", "Information affichée",
                          choices = list("Degré entrant" = 1,
                                         "Degré sortant" = 2,
                                         "Communautés - Algorithme de Louvain" = 3, 
@@ -104,8 +110,8 @@ server <- function(input, output) {
   departs <- co_occ_oriented[,sum(N), by = .(from_station_id)]
   arrivees <- co_occ_oriented[,sum(N), by = .(to_station_id)]
 
-  # Elimination de trajets très peu fréquents pour visualisation
-  N_min <- length(input$Jours) * (input$Choix_heure[2] - input$Choix_heure[1]) / 24 * 52 
+  # Elimination de trajets peu fréquents
+  N_min <- length(input$Jours) * (input$Choix_heure[2] - input$Choix_heure[1]) * 52 * input$Nb_tr_min 
   co_occ_oriented <- co_occ_oriented[N >= N_min]
   
   # Construction du graphe orienté
