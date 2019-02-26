@@ -1,6 +1,7 @@
 #####################################################################################
-# Lorsqu'on sélectionne une station sur le graphe, un popup s'affiche sur la carte  #
-# et les informations sur la station s'affichent au-dessous du graphe               #
+# Lorsqu'on sélectionne une station sur le graphe ou sur la carte, un popup         # 
+# s'affiche sur la carte et le sommet devient noir                                  #
+# Les informations sur la station s'affichent au-dessous du graphe                  #
 #####################################################################################
 
 
@@ -195,6 +196,9 @@ server <- function(input, output) {
   
   coord_geo <- fichier_stations[,.(id, latitude, longitude)]
   visu_stations <- merge(visu_stations,coord_geo, by="id")
+  
+  V(g)[which(V(g)$name == myNode$selected)]$color <- "black"
+  V(g)[which(V(g)$name == myNode$selected)]$size <- 60
   
   return(list(visu_stations, g, departs, arrivees))
   
