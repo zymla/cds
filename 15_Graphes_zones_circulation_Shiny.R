@@ -2,6 +2,8 @@
 # Lorsqu'on sélectionne une station sur le graphe ou sur la carte, un popup         # 
 # s'affiche sur la carte et le sommet devient noir                                  #
 # Les informations sur la station s'affichent au-dessous du graphe                  #
+# Les couleurs dans les 2 méthodes de détection des communautés sont affectés       #
+# de façon semblable (en fonction de la taille du cluster)                          #
 #####################################################################################
 
 
@@ -85,6 +87,7 @@ ui <- fluidPage(titlePanel(h1(id="Titre","Réseau Divvy")),
                             fluidRow(textOutput('txtLongitude')), 
                             fluidRow(textOutput('txtDeparts')),
                             fluidRow(textOutput('txtArrivees'))
+                            
                             )
                      ),
               column(width = 5,
@@ -156,7 +159,7 @@ server <- function(input, output) {
   # Degré entrant
   if(input$methode == 1){ 
     col_split <- cut(centrality_w$degre_pondere_in, breaks = unique(quantile(centrality_w$degre_pondere_in,0:9/9)), include.lowest = T)
-    ramp_pal <- colorRampPalette(c("red","yellow","springgreen","royalblue"))
+    ramp_pal <- colorRampPalette(c("brown","red","yellow","springgreen","royalblue","darkmagenta"))
     color_vector <- ramp_pal(length(levels(col_split)))
     V(g)$color <- color_vector[col_split]
   }
@@ -164,7 +167,7 @@ server <- function(input, output) {
   # Degré sortant
   else if(input$methode == 2){
     col_split <- cut(centrality_w$degre_pondere_out, breaks = unique(quantile(centrality_w$degre_pondere_out,0:9/9)), include.lowest = T)
-    ramp_pal <- colorRampPalette(c("red","yellow","springgreen","royalblue"))
+    ramp_pal <- colorRampPalette(c("brown","red","yellow","springgreen","royalblue","darkmagenta"))
     color_vector <- ramp_pal(length(levels(col_split)))
     V(g)$color <- color_vector[col_split]
   }
@@ -173,21 +176,89 @@ server <- function(input, output) {
   # Clustering avec l'algorithme de Louvain
   else if(input$methode == 3){
     c <- cluster_louvain(as.undirected(g))
-    col_split <- c$membership
-    ramp_pal <- colorRampPalette(c("red","yellow","springgreen","royalblue"))
+    
+    # Gestion de l'ordre de couleurs
+      memb_init <- as.data.table(table(c$membership))
+      setorder(memb_init,-N)
+      memb_init$compteur <- 1
+      memb_init[, cluster0 := rowid(compteur)]
+      
+      cluster_col1 <- function(ligne){cluster_def <- ligne * 2 - 1}
+      
+      cluster_col2 <- function(ligne, nlignes){cluster_def <- (nlignes - ligne) * 2 + 2}
+      
+      
+      memb_init[cluster0 <= ceiling(nrow(memb_init)/2), cluster_def := cluster_col1(cluster0)]
+      memb_init[cluster0 > ceiling(nrow(memb_init)/2), cluster_def := cluster_col2(cluster0,nrow(memb_init))]
+      
+      memb_init$N <- NULL
+      memb_init$compteur <- NULL
+      memb_init$cluster0 <- NULL
+      memb_init$V1 <- as.integer(memb_init$V1)
+      
+      
+      membership <- data.table(as.integer(c$membership))
+      membership$compteur <- 1
+      membership[, idx := rowid(compteur)]
+      membership$compteur <- NULL
+      
+      clusters <- merge(membership, memb_init)
+      setorder(clusters,idx)
+      clusters$idx <- NULL
+      
+      # col_split <- c$membership
+      col_split <- clusters$cluster_def
+    # Fin de gestion de couleurs
+    
+    
+    ramp_pal <- colorRampPalette(c("brown","red","yellow","springgreen","royalblue","darkmagenta"))
     color_vector <- ramp_pal(uniqueN(col_split))
     V(g)$color <- color_vector[col_split]
+    V(g)$label <- paste0(V(g)$label,", Communauté : ",col_split)
   }
   
   # Clustering spectral
   else if(input$methode == 4){
-    c <- cluster_leading_eigen(as.undirected(g))
+    c <- cluster_leading_eigen(as.undirected(g),options=list(maxiter=1000000))
+    
+    # Gestion de l'ordre de couleurs
+      memb_init <- as.data.table(table(c$membership))
+      setorder(memb_init,-N)
+      memb_init$compteur <- 1
+      memb_init[, cluster0 := rowid(compteur)]
+      
+      cluster_col1 <- function(ligne){cluster_def <- ligne * 2 - 1}
+      
+      cluster_col2 <- function(ligne, nlignes){cluster_def <- (nlignes - ligne) * 2 + 2}
+      
+      
+      memb_init[cluster0 <= ceiling(nrow(memb_init)/2), cluster_def := cluster_col1(cluster0)]
+      memb_init[cluster0 > ceiling(nrow(memb_init)/2), cluster_def := cluster_col2(cluster0,nrow(memb_init))]
+      
+      memb_init$N <- NULL
+      memb_init$compteur <- NULL
+      memb_init$cluster0 <- NULL
+      memb_init$V1 <- as.integer(memb_init$V1)
+      
+      
+      membership <- data.table(as.integer(c$membership))
+      membership$compteur <- 1
+      membership[, idx := rowid(compteur)]
+      membership$compteur <- NULL
+      
+      clusters <- merge(membership, memb_init)
+      setorder(clusters,idx)
+      clusters$idx <- NULL
+      
+      # col_split <- c$membership
+      col_split <- clusters$cluster_def
+    # Fin de gestion de couleurs
     
     # Visualisation avec un graphe
-    col_split <- c$membership
-    ramp_pal <- colorRampPalette(c("red","yellow","springgreen","royalblue"))
+    ramp_pal <- colorRampPalette(c("brown","red","yellow","springgreen","royalblue","darkmagenta"))
     color_vector <- ramp_pal(uniqueN(col_split))
     V(g)$color <- color_vector[col_split]
+    V(g)$label <- paste0(V(g)$label,", Communauté : ",col_split)
   }
 
   
