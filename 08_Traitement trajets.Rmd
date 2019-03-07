@@ -1,0 +1,234 @@
+---
+title: "08_Traitement_Trips"
+author: "Magda Bolewska"
+date: "11 janvier 2019"
+output: word_document
+---
+
+## Traitement de données trajets
+divvy_trips_2019_01_09_22_36_14_2ed02854c25.csv est le fichier des trajets pour la période 01/03/2017 - 31/07/2018 extrait avec le programme 05 disponible le soir du mercredi 09/01/2018.
+
+Le programme contient des statistiques descriptives. Quelques variables sont également ajoutées : 
+- jour de la semaine, 
+- mois, 
+- identifiant "station de départ - station d'arrivée", 
+- distance entre la station de départ et la station d'arrivée.
+
+Les données semblent être de bonne qualité. Les seuls points d'attention à ce stade : quelques stations figurent avec 2 noms différents (semblables), idem pour les coordonnées géographiques.
+=> Ce problème a été corrigé à l'étape 3.
+
+
+```{r donnees}
+library(data.table)
+library(lubridate)
+library(ggplot2)
+library(leaflet)
+library(geosphere)
+library(dbscan)
+```
+
+## 1 - Importation de données
+```{r}
+trips_filename <- list.files('data_raw', pattern = 'divvy_trips_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
+trips_filename
+```
+```{r}
+trips <- fread(trips_filename, na.strings = c(""))
+trips[
+  , 
+  `:=`(
+    start_time = as_datetime(start_time),
+    stop_time = as_datetime(stop_time)
+  ), 
+  ]
+summary(trips)
+```
+# Ajout de variables complémentaires
+```{r}
+trips[, age := 2017-birth_year]
+trips[, weekday := lubridate::wday(start_time, label=TRUE)]
+trips[, month := lubridate::month(start_time, label=TRUE)]
+trips[, trip := paste(from_station_id,to_station_id,sep="_") ]
+
+# Durée de trajet en minutes
+trips[, duration_m := trip_duration / 60]
+
+summary(trips)
+```
+# Suppression des variables qui ne seront pas utilisées dans l'étude
+```{r}
+trips$bike_id <- NULL
+trips$from_location <- NULL
+trips$to_location <- NULL
+trips$birth_year <- NULL
+
+colnames(trips)
+```
+
+## 2 - Statistiques descriptives
+
+```{r analyse_par_variable}
+
+# Type d'assure
+trips[,.N, by=.(user_type)] 
+trips <- trips[user_type != "Dependent"] # suppression d'une observation
+ggplot(trips)+aes(x=user_type)+geom_bar(fill="blue")
+```
+# Statistiques par âge
+```{r}
+ggplot(trips)+aes(x=age)+geom_histogram(fill="blue")
+```
+
+
+# Statistiques par sexe
+```{r}
+ggplot(trips)+aes(x=gender)+geom_bar(fill="blue")
+```
+
+
+# Statistiques par jour de la semaine
+```{r}
+ggplot(trips)+aes(x=weekday)+geom_bar(fill="blue")
+```
+
+
+# Statistiques par mois
+```{r}
+ggplot(trips)+aes(x=month)+geom_bar(fill="blue")
+```
+
+
+# Durée du trajet
+```{r}
+ggplot(trips)+aes(x=duration_m)+geom_histogram(fill="blue") + xlim(0, 180) 
+```
+
+# Stations de départ et stations d'arrivée
+```{r depart_arrivee}
+length(unique(trips$from_station_name)) # 591 stations de départ
+```
+
+
+```{r depart_arrivee}
+length(unique(trips$to_station_name)) # 591 stations d'arrivée
+```
+
+
+```{r depart_arrivee}
+length(unique(trips$from_station_id)) # 583 stations de départ
+```
+
+
+```{r depart_arrivee}
+length(unique(trips$to_station_id)) # 583 stations de arrivée
+```
+
+
+# A priori quelques stations ont été renommées. Lesquelles ?
+```{r depart_arrivee}
+test <- unique(trips[,.(from_station_name,from_station_id),])
+test[,.N,by=.(from_station_id)][N!=1]
+```
+
+
+```{r depart_arrivee}
+test[from_station_id == "574"] # 75 53 321 17 437 480 544 574 en double
+```
+
+
+```{r depart_arrivee}
+test2 <- unique(trips[,.(to_station_name,to_station_id),])
+test2[,.N,by=.(to_station_id)][N!=1]
+```
+
+
+```{r depart_arrivee}
+test2[to_station_id == "574"] # 75 53 321 17 437 480 544 574 en double
+```
+8 stations figurent sous deux noms différentes. En réalité il y a 583 stations
+
+
+# Est-ce que les stations ont des coordonnées uniques;
+```{r depart_arrivee}
+test3 <- unique(trips[,.(from_station_id,from_latitude,from_longitude),])
+test3[,.N,by=.(from_station_id)][N!=1] # Non !
+```
+
+
+# A chaque station, on attribue un nom et des coordonnées uniques
+```{r depart_arrivee}
+nc_stations <- trips[!duplicated(trips[, from_station_id]),.(from_station_id,from_station_name,from_latitude,from_longitude) ]
+nrow(nc_stations) # 583
+```
+
+
+```{r depart_arrivee}
+setnames(nc_stations, old = c("from_station_id", "from_station_name","from_latitude","from_longitude"), new = c("station_id", "station_name","latitude","longitude"))
+summary(nc_stations)
+```
+
+
+# Dessiner les stations sur une carte interactive
+```{r depart_arrivee}
+m <- leaflet(data=nc_stations) %>%
+  addTiles() %>%
+  setView(lng=-87.6297982, lat=41.8781136, zoom=12) %>%
+  addCircleMarkers(~longitude, ~latitude, radius=3)
+  # addCircles(~longitude, ~latitude)
+m
+```
+
+
+## 3 - Correction de la table trips pour avoir des noms et coordonnées uniques
+```{r ajustement}
+trips$from_station_name <- NULL
+trips$from_latitude <- NULL
+trips$from_longitude <- NULL
+trips$to_station_name <- NULL
+trips$to_latitude <- NULL
+trips$to_longitude <- NULL
+setnames(nc_stations, old = c("station_id", "station_name","latitude","longitude"), new = c("from_station_id","from_station_name","from_latitude","from_longitude"))
+
+nrow(trips)
+```
+
+
+```{r ajustement}
+trips <- merge(trips,nc_stations,by= c("from_station_id"))
+head(trips)
+```
+
+
+```{r ajustement}
+setnames(nc_stations, old = c("from_station_id", "from_station_name","from_latitude","from_longitude"), new = c("to_station_id", "to_station_name","to_latitude","to_longitude"))
+trips <- merge(trips,nc_stations,by= c("to_station_id"))
+```
+
+## 4 - Calcul de la distance parcurue
+### On considère que les rues sont perpendiculaires
+```{r distance}
+tmp1 <- trips[!duplicated(trips[, trip]),.(trip, from_latitude,from_longitude,to_latitude,to_longitude) ]
+
+tmp1$dist <- 0
+for (i in 1:nrow(tmp1)){
+  tmp1[i,6] <- distHaversine(c(as.double(tmp1[i,3]),as.double(tmp1[i,2])),c(as.double(tmp1[i,3]),as.double(tmp1[i,4])))
+                + distHaversine(c(as.double(tmp1[i,3]),as.double(tmp1[i,4])),c(as.double(tmp1[i,5]),as.double(tmp1[i,4])))
+}
+tmp1 <- tmp1[,.(trip,dist)] 
+trips$dist <- NULL
+trips <- merge(trips,tmp1,by= c("trip"))
+```
+
+# Répartition de la distance entre les stations de départ et d'arrivée
+
+```{r distance}
+ggplot(trips)+aes(x=dist,y=..density..)+geom_histogram(fill="blue")+ 
+  geom_density(alpha=.2, fill="#FF6666") + xlim(0, 10000)
+```
+
+
+```{r distance}
+summary(trips)
+```
+
+

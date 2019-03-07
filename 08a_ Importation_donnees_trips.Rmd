@@ -1,0 +1,88 @@
+---
+title: "05_socrata_chicago_data_query - extrait"
+output: html_notebook
+author: "jan.zymla@renault.com"
+date: "2019-01-08"
+---
+
+```{r}
+library(tidyverse)
+library(purrr)
+library(magrittr)
+library(lubridate)
+library(data.table)
+```
+
+```{r}
+library(httr)
+library(jsonlite)
+```
+
+```{r}
+keys <- read_csv("secrets/keys.csv")
+```
+
+# Get trip data
+Code pour télécharger les données trips
+Il s'agit de l'extrait du code 05 disponible le 09/01/2018 avec le choix de la période 01/03/2017 - 01/08/2017.
+
+
+```{r}
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.csv',
+    query = 
+      list(
+        
+        `$where`  = 'start_time > "2010-01-01T00:00:00.000"',
+        `$select`  = 'count(trip_id)',
+        `$limit`  = "1999999999"
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      ),
+    #write_disk(tmpf, overwrite = TRUE),
+    progress()
+    )
+```
+## Download data
+### Create data file
+```{r}
+tmpf <-
+  tempfile(
+    pattern  = paste0('divvy_trips_', now() %>% str_replace_all('[^0-9]+', '_'), '_'),
+    tmpdir  = 'data_raw',
+    fileext = ".csv"
+  )
+tmpf
+```
+### Download directly to file
+```{r}
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.csv',
+    query = 
+      list(
+        `$where`  = 'start_time > "2017-03-01T00:00:00.000"  AND stop_time <= "2017-08-01T00:00:00.000"',
+        `$limit`  = "1999999999"
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      ),
+    write_disk(tmpf, overwrite = FALSE),
+    progress()
+    )
+```
+
+## Load data
+```{r}
+trips <- fread(tmpf, na.strings = c(""))
+trips[
+  , 
+  `:=`(
+    start_time = as_datetime(start_time),
+    stop_time = as_datetime(stop_time)
+    ), 
+  ]
+glimpse(trips)
+```

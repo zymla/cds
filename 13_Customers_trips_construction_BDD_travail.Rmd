@@ -1,0 +1,516 @@
+---
+title: "Construction de la base de travail des trips pour l'année 2017"
+output:
+  html_document:
+    df_print: paged
+date: "08.02.2019"
+---
+
+
+```{r}
+#install.packages("chron")
+
+library(data.table)
+library(tictoc)
+library(lubridate)
+library(geosphere)
+```
+
+
+
+#########################################################################
+### Mise en forme des données STATIONS
+### Ce qu'on souhaite c'est récupérer les taux d'utilisation des stations
+### leurs capacités
+#########################################################################
+
+
+```{r}
+tmpfs <- fread("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/data_raw/divvy_stations_2019_02_22_00_56_01_7741b595ace.csv")
+```
+
+
+```{r}
+dim(tmpfs)
+
+setorder (tmpfs,timestamp)
+
+print(tmpfs[1:10,timestamp])
+print(tmpfs[30461891:30461901,timestamp])
+
+```
+
+```{r}
+tmpfs[,total_docks:=as.integer(total_docks)]
+setorder (tmpfs,id,timestamp)
+```
+
+
+#### Suppression de variables à ce stade non utiles
+
+```{r}
+tmpfs[,c("address","latitude","longitude","location","station_name"):=NULL]
+```
+
+
+#### Gestion de la date
+### On crée les variables hr, jour, mois qui permettront d'apparier les infos sur les stations
+### au fichier des trajets par tranche horaire
+
+```{r}
+  # On passe en format date
+tmpfs[,timestamp := as_datetime(timestamp)] 
+  # Heure
+tmpfs[,hr:=hour(timestamp)]
+  # Jour
+tmpfs[,jour:=day(timestamp)]
+  # Mois
+tmpfs[,mois:=month(timestamp)]
+```
+
+
+#### Gestion des heures
+###  On va construire des tranches horaires, notamment pour apparier avec les données stations
+
+```{r}
+# On prend le plus fin pour être au plus d'une distribution de valeurs continues (15 cela marche bien, car plus fin cela crée de la valeur manquante lors de l'appariemment avec trips)
+
+  # Tranches horaires de 15 min
+for (i in seq(0,59,by=15)){
+  tmpfs[(minute(timestamp)>=0+i & minute(timestamp)<15+i), tr_hor_15:= paste("[",i,"-",i+15,"[")]
+}
+
+  # Tranches horaires de 4 heures
+for (i in seq(0,23,by=4)){
+  tmpfs[(hour(timestamp)>=0+i & hour(timestamp)<4+i), hr4:= paste("[",i,"-",i+4,"[")]
+}
+
+```
+
+
+#### Taux d'utilisation des bornes
+
+```{r}
+# total_docks : capacité totale de la station (nb total de places disponibles pour accueillir un vélo). 
+# docks_in_service: places en fonctionnement pour accueillir un vélo (= total_docks - pannes)
+
+# available_docks: places libres parmi les places en fonctionnement
+# available_bikes: nb de vélos disponibles à la station
+#     => available_docks + available_bikes = docks_in_service
+
+# pct_full    = taux de remplissage de la station (available_bikes/total_docks)
+# pct_full_av = taux de remplissage de la station si on ne tient compte que des places disponibles (available_bikes/docks_in_service)
+
+tmpfs[,pct_full   :=round((available_bikes/total_docks),2)*100]
+tmpfs[,pct_full_av:=round((available_bikes/docks_in_service),2)*100]
+
+tmpfs[,c("status","timestamp","record","percent_full"):=NULL]
+
+```
+
+# il faut agréger par vélo, date (mois, jour), heure,tranche horaire, par vélo
+
+```{r}
+# Quelle que soit la tranche horaire (10,15,20 et 30) considérée la distribution des variables m_pct_full et m_pct_full_av est la même. Ce qui change c'est le nombre de valeurs manquantes (augmente avec la largeur de la tranche horaire)
+# On choisit arbitrairement 15 min pour l'égrégation des indicateurs
+#> summary(stations1[,m_pct_full],useNA = "ifany")
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+#    0.0    26.0    40.0    43.3    60.0   100.0      42 
+#    0.0    26.0    40.0    43.3    60.0   100.0      51 
+#    0.0    26.0    40.0    43.3    60.0   100.0      57 
+#    0.0    26.0    40.33   43.30   60.00  100.00     71 
+#> summary(stations1[,m_pct_full_av],useNA = "ifany")
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+#   0.00   26.00   43.00   44.69   64.00  100.00     255 
+#   0.00   26.00   43.00   44.69   64.00  100.00     270 
+#   0.00   26.00   43.00   44.69   64.00  100.00     279 
+#   0.00   26.00   43.00   44.69   64.00  100.00     299 
+
+  # Pour la capacité on prend la moyenne : on est sur des tranches horaires de 15 min
+  # Tester plus tard ce que cela donne si on prends a médiane (tps d'exécution long)
+
+stations <- copy(tmpfs)
+tmpfs[,c("tr_hor_15"):=NULL]
+
+stations <- stations[,m_total_docks:=mean(total_docks),by=.(id,mois,jour,hr,tr_hor_15)]
+stations <- stations[,m_docks_in_service:=mean(docks_in_service),by=.(id,mois,jour,hr,tr_hor_15)]
+stations <- stations[,m_available_docks:=mean(available_docks),by=.(id,mois,jour,hr,tr_hor_15)]
+stations <- stations[,m_available_bikes:=mean(available_bikes),by=.(id,mois,jour,hr,tr_hor_15)]
+stations <- stations[,m_pct_full:=mean(pct_full),by=.(id,mois,jour,hr,tr_hor_15)]
+stations <- stations[,m_pct_full_av:=mean(pct_full_av),by=.(id,mois,jour,hr,tr_hor_15)]
+
+stations[,c("hr4","total_docks","docks_in_service","available_docks","available_bikes","pct_full","pct_full_av"):=NULL]
+
+ # On supprime les doublons   
+stations <- unique(stations)
+
+saveRDS(stations,"D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/fichier_anissa/stations.rda",compress=FALSE)
+
+rm(stations)
+
+```
+
+
+```{r}
+stations_4h <- copy(tmpfs)
+
+stations_4h <- stations_4h[,m_total_docks_4h:=mean(total_docks),by=.(id,mois,jour,hr4)]
+stations_4h <- stations_4h[,m_docks_in_service_4h:=mean(docks_in_service),by=.(id,mois,jour,hr4)]
+stations_4h <- stations_4h[,m_available_docks_4h:=mean(available_docks),by=.(id,mois,jour,hr4)]
+stations_4h <- stations_4h[,m_available_bikes_4h:=mean(available_bikes),by=.(id,mois,jour,hr4)]
+stations_4h <- stations_4h[,m_pct_full_4h:=mean(pct_full),by=.(id,mois,jour,hr4)]
+stations_4h <- stations_4h[,m_pct_full_av_4h:=mean(pct_full_av),by=.(id,mois,jour,hr4)]
+
+stations_4h[,c("hr","total_docks","docks_in_service","available_docks","available_bikes","pct_full","pct_full_av"):=NULL]
+stations_4h <- unique(stations_4h)
+
+saveRDS(stations_4h,"D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/fichier_anissa/stations_4h.rda",compress=FALSE)
+
+rm(stations_4h)
+rm(tmpfs)
+```
+
+
+
+#### Importation du fichier des TRIPS
+########################################
+
+
+```{r}
+trips <- fread("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/data_raw/divvy_trips_2019_02_22_00_51_40_774496853fd.csv")
+```
+
+```{r}
+  # On passe en format date
+trips[,`:=`(start_time = as_datetime(start_time),stop_time = as_datetime(stop_time))] 
+```
+
+### Filtre sur l'année des trips qui nous intéressent : ceux de 2017
+
+```{r}
+trajets <- trips[year(start_time)==2017,]
+
+rm(trips)
+```
+
+```{r}
+colnames(trajets)
+```
+
+
+### Calcul distance entre deux points
+
+```{r}
+trajets[,distHav:= distHaversine(trajets[,c("from_longitude","from_latitude")],trajets[,c("to_longitude","to_latitude")])]
+
+trajets[,distMan:= abs(to_latitude*111130-from_latitude*111130)+abs(to_longitude*82717-from_longitude*82717)]
+```
+
+
+### Gestion de la cohérence des noms de stations (pour certains id le nom change)
+### On crée une table intermédiaire pour homogénéiser
+
+```{r}
+station_mvt <- trajets[,c("from_station_id","start_time","from_station_name")]
+setorderv(station_mvt,c("from_station_id","start_time","from_station_name"))
+
+coor_st <- station_mvt[, .(from_station_name = last(from_station_name)), .(id = from_station_id)]
+
+rm(station_mvt)
+```
+
+
+### Suppression des variables inutiles pour la suite
+
+```{r}
+trajets[,c("from_latitude","from_longitude","from_location","to_latitude","to_longitude","to_location","birth_year","gender","from_station_name","to_station_name","bike_id"):=NULL]
+```
+
+
+
+### Création de quelques variables d'intérêt
+
+```{r}
+trajets[,abonne:=ifelse(user_type=="Customer",1L,0L)]
+trajets[,c("user_type"):=NULL]
+```
+
+
+
+
+```{r}
+  # Ajout du nom de station unique
+trajets <- merge(trajets,coor_st, by.x = c("from_station_id"),by.y=c("id"), all.y=TRUE)
+setnames(coor_st,"from_station_name","to_station_name")
+trajets <- merge(trajets,coor_st, by.x = c("to_station_id"),by.y=c("id"), all.y=TRUE)
+
+  # Trajets
+trajets[,  trajet_id:=paste0("From ",from_station_id, " to ", to_station_id)]
+trajets[,trajet_name:=paste0("From ",from_station_name, " to ", to_station_name)]
+
+rm(coor_st)
+# Note : 576 trajets (121309 trips) avec mêmes poinst de départs et arrivées
+# Distribution des durées moyennes par trajet
+#  Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#  103.7  1501.2  2076.4  2512.4  2830.8 22056.9 
+# Quantile à 1% : 583
+```
+
+
+#### Gestion de la date
+### On considère qu'une journée commence à 5h du matin  
+### On va décaler les dates et construire une variable qui nous dira si on est en semaine ou en week-end
+
+```{r}
+night_thd = 5
+
+  # Départ: Numéro du jour de la semaine : Levels: (1) Sun < Mon < Tue < Wed < Thu < Fri < Sat (7)
+trajets[, wday_n := data.table::wday(start_time - night_thd * 3600)]
+
+  # Départ: Heure
+trajets[, start_hr := hour(start_time)]
+  # Départ: Jour
+trajets[, start_jour := day(start_time)]
+  # Départ: Mois
+trajets[, start_mois := month(start_time)]
+
+
+  # Arrivée: Heure
+trajets[, stop_hr := hour(stop_time)]
+  # Arrivée: Jour
+trajets[, stop_jour := day(stop_time)]
+  # Arrivée: Mois
+trajets[, stop_mois := month(stop_time)]
+
+```
+
+
+#### Gestion des heures
+###  On va construire des tranches de 15 min par heure,
+###  notamment pour apparier avec les données stations
+
+```{r}
+  # Tranches d'heures de 15 min
+for (i in seq(0,59,by=15)){
+  trajets[(minute(start_time)>=0+i & minute(start_time)<15+i), start_tr_hor_15:= paste("[",i,"-",i+15,"[")]
+  trajets[(minute(stop_time)>=0+i & minute(stop_time)<15+i), stop_tr_hor_15:= paste("[",i,"-",i+15,"[")]
+}
+
+  # Tranches de 4 heures
+for (i in seq(0,23,by=4)){
+  trajets[(hour(start_time)>=0+i & hour(start_time)<4+i), start_hr4:= paste("[",i,"-",i+4,"[")]
+  trajets[(hour(stop_time)>=0+i & hour(stop_time)<4+i), stop_hr4:= paste("[",i,"-",i+4,"[")]
+}
+```
+
+
+```{r}
+# Tranches horaires: distribution homogène dans la table
+table(trajets[,start_tr_hor_15],useNA = "ifany")
+table(trajets[,start_hr4],useNA = "ifany")
+```
+
+
+
+############################################################
+#### On ajoute les infos de stations à la table des trajets
+############################################################
+
+
+```{r}
+# On fait un left outer join pour ajouter les variables en fonction des valeurs de départ des trajets
+
+stations <- readRDS("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/fichier_anissa/stations.rda")
+
+trajets[,id:=from_station_id]
+trajets[,mois:=start_mois]
+trajets[,jour:=start_jour]
+trajets[,hr:=start_hr]
+trajets[,tr_hor_15:=start_tr_hor_15]
+
+trajets<-merge(trajets,stations,by=c("id","mois","jour","hr","tr_hor_15"),all.x =TRUE)
+
+setnames(trajets, "m_total_docks","start_m_total_docks")
+setnames(trajets, "m_docks_in_service","start_m_docks_in_service")
+setnames(trajets, "m_available_docks","start_m_available_docks")
+setnames(trajets, "m_available_bikes","start_m_available_bikes")
+setnames(trajets, "m_pct_full","start_m_pct_full")
+setnames(trajets, "m_pct_full_av","start_m_pct_full_av")
+
+# On fait un left outer join pour ajouter les variables en fonction des valeurs d'arrivée des trajets
+trajets[,c("id","mois","jour","hr","tr_hor_15"):=NULL]
+
+trajets[,id:=to_station_id]
+trajets[,mois:=stop_mois]
+trajets[,jour:=stop_jour]
+trajets[,hr:=stop_hr]
+trajets[,tr_hor_15:=stop_tr_hor_15]
+
+trajets<-merge(trajets,stations,by=c("id","mois","jour","hr","tr_hor_15"),all.x =TRUE)
+
+setnames(trajets, "m_total_docks","stop_m_total_docks")
+setnames(trajets, "m_docks_in_service","stop_m_docks_in_service")
+setnames(trajets, "m_available_docks","stop_m_available_docks")
+setnames(trajets, "m_available_bikes","stop_m_available_bikes")
+setnames(trajets, "m_pct_full","stop_m_pct_full")
+setnames(trajets, "m_pct_full_av","stop_m_pct_full_av")
+
+rm(stations)
+file.remove("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/fichier_anissa/stations.rda")
+```
+
+
+```{r}
+  # on remplace les potentielles NA : d'abord par tranche de 4 heures
+
+stations_4h <- readRDS("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/fichier_anissa/stations_4h.rda")
+
+trajets[,c("id","mois","jour","hr","tr_hor_15"):=NULL]
+trajets[,id:=from_station_id]
+trajets[,mois:=start_mois]
+trajets[,jour:=start_jour]
+trajets[,hr4:=start_hr4]
+
+trajets<-merge(trajets,stations_4h,by=c("id","mois","jour","hr4"),all.x =TRUE)
+
+trajets[,start_m_total_docks:=(ifelse(is.na(start_m_total_docks),m_total_docks_4h,start_m_total_docks))]  
+trajets[,start_m_docks_in_service:=(ifelse(is.na(start_m_docks_in_service),m_docks_in_service_4h,start_m_docks_in_service))]  
+trajets[,start_m_available_docks:=(ifelse(is.na(start_m_available_docks),m_available_docks_4h,start_m_available_docks))]  
+trajets[,start_m_available_bikes:=(ifelse(is.na(start_m_available_bikes),m_available_bikes_4h,start_m_available_bikes))]  
+trajets[,start_m_pct_full:=(ifelse(is.na(start_m_pct_full),m_pct_full_4h,start_m_pct_full))]  
+trajets[,start_m_pct_full_av:=(ifelse(is.na(start_m_pct_full_av),m_pct_full_av_4h,start_m_pct_full_av))]  
+
+trajets[,c("id","mois","jour","hr4"):=NULL]
+trajets[,c("m_total_docks_4h","m_docks_in_service_4h","m_available_docks_4h","m_available_bikes_4h","m_pct_full_4h","m_pct_full_av_4h"):=NULL]
+
+trajets[,id:=to_station_id]
+trajets[,mois:=stop_mois]
+trajets[,jour:=stop_jour]
+trajets[,hr4:=stop_hr4]
+
+trajets<-merge(trajets,stations_4h,by=c("id","mois","jour","hr4"),all.x =TRUE)
+
+trajets[,stop_m_total_docks:=(ifelse(is.na(stop_m_total_docks),m_total_docks_4h,stop_m_total_docks))]  
+trajets[,stop_m_docks_in_service:=(ifelse(is.na(stop_m_docks_in_service),m_docks_in_service_4h,stop_m_docks_in_service))]  
+trajets[,stop_m_available_docks:=(ifelse(is.na(stop_m_available_docks),m_available_docks_4h,stop_m_available_docks))]  
+trajets[,stop_m_available_bikes:=(ifelse(is.na(stop_m_available_bikes),m_available_bikes_4h,stop_m_available_bikes))]  
+trajets[,stop_m_pct_full:=(ifelse(is.na(stop_m_pct_full),m_pct_full_4h,stop_m_pct_full))]  
+trajets[,stop_m_pct_full_av:=(ifelse(is.na(stop_m_pct_full_av),m_pct_full_av_4h,stop_m_pct_full_av))]  
+
+rm(stations_4h)
+file.remove("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/fichier_anissa/stations_4h.rda")
+
+```
+
+```{r}
+# Refaire avec imputation sur la valeur de la journée
+```
+
+
+
+```{r}
+trajets[,c("id","mois","jour","hr4"):=NULL]
+trajets[,c("m_total_docks_4h","m_docks_in_service_4h","m_available_docks_4h","m_available_bikes_4h","m_pct_full_4h","m_pct_full_av_4h"):=NULL]
+trajets[,c("start_tr_hor_15","stop_tr_hor_15","start_hr4","stop_hr4"):=NULL]
+
+```
+
+# Aggrégation par trajet
+
+```{r}
+setorderv(trajets,c("to_station_id","from_station_id","start_time"))
+
+trajets[,c("start_time","start_mois","stop_time","start_hr","start_jour","stop_hr","stop_jour","stop_mois"):=NULL]  
+```
+
+
+```{r}
+trajets <- trajets[,nb_trips:=.N,by=.(trajet_id,wday_n)]
+
+trajets <- trajets[,moy_distHav:=round(mean(distHav)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,moy_distMan:=round(mean(distMan)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,moy_trip_duration:=round(mean(trip_duration)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,pct_abonne:=round(mean(abonne),3)*100,by=.(trajet_id,wday_n)]
+
+trajets <- trajets[,start_moy_total_docks:=round(mean(start_m_total_docks)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,start_moy_docks_in_service:=round(mean(start_m_docks_in_service)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,start_moy_available_docks:=round(mean(start_m_available_docks)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,start_moy_available_bikes:=round(mean(start_m_available_bikes)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,start_moy_pct_full:=round(mean(start_m_pct_full)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,start_moy_pct_full_av:=round(mean(start_m_pct_full_av)),by=.(trajet_id,wday_n)]
+
+trajets <- trajets[,stop_moy_total_docks:=round(mean(stop_m_total_docks)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,stop_moy_docks_in_service:=round(mean(stop_m_docks_in_service)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,stop_moy_available_docks:=round(mean(stop_m_available_docks)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,stop_moy_available_bikes:=round(mean(stop_m_available_bikes)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,stop_moy_pct_full:=round(mean(stop_m_pct_full)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,stop_moy_pct_full_av:=round(mean(stop_m_pct_full_av)),by=.(trajet_id,wday_n)]
+
+trajets <- trajets[,med_distHav:=round(quantile(distHav,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,med_distMan:=round(quantile(distMan,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,med_trip_duration:=round(quantile(trip_duration,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+
+
+trajets <- trajets[,start_med_total_docks:=round(quantile(start_m_total_docks,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,start_med_docks_in_service:=round(quantile(start_m_docks_in_service,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,start_med_available_docks:=round(quantile(start_m_available_docks,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,start_med_available_bikes:=round(quantile(start_m_available_bikes,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,start_med_pct_full:=round(quantile(start_m_pct_full,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,start_med_pct_full_av:=round(quantile(start_m_pct_full_av,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+
+trajets <- trajets[,stop_med_total_docks:=round(quantile(stop_m_total_docks,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,stop_med_docks_in_service:=round(quantile(stop_m_docks_in_service,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,stop_med_available_docks:=round(quantile(stop_m_available_docks,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,stop_med_available_bikes:=round(quantile(stop_m_available_bikes,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,stop_med_pct_full:=round(quantile(stop_m_pct_full,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+trajets <- trajets[,stop_med_pct_full_av:=round(quantile(stop_m_pct_full_av,c(0.5),na.rm=TRUE)),by=.(trajet_id,wday_n)]
+
+```
+
+
+```{r}
+trajets[,c("abonne","trip_id","trip_duration","distHav","distMan","start_m_total_docks","start_m_docks_in_service","start_m_available_docks","start_m_available_bikes","start_m_pct_full","start_m_pct_full_av","stop_m_total_docks","stop_m_docks_in_service","stop_m_available_docks","stop_m_available_bikes","stop_m_pct_full","stop_m_pct_full_av"):=NULL]
+```
+
+```{r}
+trajets<-unique(trajets)
+setorderv(trajets,c("trajet_id","wday_n"))
+```
+
+
+```{r}
+saveRDS(trajets,"D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/fichier_anissa/trajets.rda",compress=FALSE)
+```
+
+
+```{r}
+# A faire : imputer les valeurs manquantes pour les trajets sans taux de remplissage
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

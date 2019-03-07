@@ -1,0 +1,47 @@
+---
+title: "Projet_20190208"
+output: html_document
+---
+
+
+
+
+
+Pour la soutenance : faut que ce qu'on montre provienne de la même machine
+Faire une base Sqlite : cela ne chargera pas toute la base en RAM. Cela chargera en mémoire que les lignes indexées
+
+15 ou 20 min pour présenter
+Les problématiques de cuisine on s'en fout
+
+Soit on a un objectif exploratoire
+Soit on a un objectif de modélisation
+Expliquer la séquence de traitements (dont récupération des données)
+On fait une application pratique pour l'utilisateur
+Chacun parle
+
+=> Raconter l'histoire du projet et le procesus de réalisation
+Dans quelle mesure on est arrivé à notre objectif ?
+On a besoin de comprendre c'était quoi le projet et pendant tout le projet ce qu'on a fait.
+
+Par exemple, on prédit et on montre comment sélectionner les résultats ou les variables
+
+=> S'assurer 
+utiliser shiny proxy par ex pour avoir des solutions différentes
+Le fait de ne pas compresser la base sur le disque fait que le chargement est plus rapide dans l'application (par défaut quand on fait saveRDS, compress=T, il faut penser à mettre saveRDS=F). 
+Ce qu'on pourrait faire: c'est faire en sorte par exemple de supprimer la base de données de l'onglet (rm()+gc() ) quand on appelle l'onglet 2
+
+
+Projet :
+Présentation du projet et objectif
+Onglet 1 : Clustering de stations
+Onglet 2 : Clustering de trajets
+Onglet 3 : Graphes / Communautés de stations
+
+
+Faire une base en considérant seulement l'année 2017
+Garde la sélection des jours pour tout le monde
+Garde la sélection des heures selon l'onglet 
+
+Réfléchir sur les perspectives...
+
+

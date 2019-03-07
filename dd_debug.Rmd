@@ -1,0 +1,25 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(data.table)
+```
+
+```{r}
+data_log_filename <- list.files('10_clustering_stations_shiny/', pattern = 'data_log_[0-9]{4}(_[0-9]{2}){5}\\.rds', full.names = TRUE) %>% max()
+print(data_log_filename)
+ds <- read_rds(data_log_filename)
+print("Done loading data file")
+ds
+```
+
+```{r}
+data_log_filename <- list.files('11_Clustering_stations_trip_data/', pattern = 'data_log_stations_trips_[0-9]{4}(_[0-9]{2}){5}\\.rds', full.names = TRUE) %>% max()
+print(data_log_filename)
+dst <- read_rds(data_log_filename)
+print("Done loading data file")
+dst %>% head()
+```

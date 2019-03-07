@@ -1,0 +1,228 @@
+---
+title: "05_socrata_chicago_data_query"
+output: html_notebook
+author: "jan.zymla@renault.com"
+date: "2019-01-08"
+---
+
+```{r}
+library(tidyverse)
+library(purrr)
+library(magrittr)
+library(lubridate)
+library(data.table)
+```
+
+```{r}
+library(httr)
+library(jsonlite)
+```
+
+```{r}
+keys <- read_csv("secrets/keys.csv")
+```
+
+
+# Get some data
+# Monthly usage statistics
+```{r}
+resp <- 
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.json',
+    query = 
+      list(
+        `$select` = 'count(bike_id), date_trunc_ym(start_time)',
+        `$group`  = 'date_trunc_ym(start_time)',
+        `$order`  = 'date_trunc_ym_start_time',
+        `$limit`  = 10000
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      )
+    )
+resp$status_code
+```
+
+```{r}
+mthly_trips <- 
+  content(resp, "text") %>% 
+  fromJSON(flatten = TRUE) %>% 
+  as.tibble() %>% 
+  transmute(
+    trip_count = as.numeric(count_bike_id),
+    ym = as_date(date_trunc_ym_start_time)
+    )
+mthly_trips
+```
+
+
+
+```{r}
+ggplot(mthly_trips) +
+  geom_col(aes(ym, trip_count))
+```
+# Daily usage stats
+```{r}
+resp <- 
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.json',
+    query = 
+      list(
+        `$select` = 'count(bike_id), date_trunc_ymd(start_time)',
+        `$group`  = 'date_trunc_ymd(start_time)',
+        `$order`  = 'date_trunc_ymd_start_time',
+        `$limit`  = 10000
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      )
+    )
+resp$status_code
+```
+
+```{r}
+mthly_trips <- 
+  content(resp, "text") %>% 
+  fromJSON(flatten = TRUE) %>% 
+  as.tibble() %>% 
+  transmute(
+    trip_count = as.numeric(count_bike_id),
+    ymd = as_date(date_trunc_ymd_start_time)
+    )
+mthly_trips
+```
+
+
+
+```{r}
+ggplot(mthly_trips) +
+  geom_col(aes(ymd, trip_count))
+```
+# Get trip data
+
+```{r}
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.csv',
+    query = 
+      list(
+        
+        `$where`  = 'start_time > "2010-01-01T00:00:00.000"',
+        `$select`  = 'count(trip_id)',
+        `$limit`  = "1999999999"
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      ),
+    #write_disk(tmpf, overwrite = TRUE),
+    progress()
+    )
+```
+## Download data
+### Create data file
+```{r}
+tmpf <-
+  tempfile(
+    pattern  = paste0('divvy_trips_', now() %>% str_replace_all('[^0-9]+', '_'), '_'),
+    tmpdir  = 'data_raw',
+    fileext = ".csv"
+  )
+tmpf
+```
+### Download directly to file
+```{r}
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/fg6s-gzvg.csv',
+    query = 
+      list(
+        `$where`  = 'start_time > "2010-01-01T00:00:00.000"  AND stop_time <= "2020-01-01T00:00:00.000"',
+        `$limit`  = "1999999999"
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      ),
+    write_disk(tmpf, overwrite = FALSE),
+    progress()
+    )
+```
+
+## Load data
+```{r}
+fread(tmpf, na.strings = c(""), nrows = 10000) %>% glimpse()
+```
+
+# Station data
+### Create data file
+```{r}
+tmpfs <-
+  tempfile(
+    pattern  = paste0('divvy_stations_', now() %>% str_replace_all('[^0-9]+', '_'), '_'),
+    tmpdir  = 'data_raw',
+    fileext = ".csv"
+  )
+tmpfs
+```
+### Download directly to file
+```{r}
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/eq45-8inv.csv',
+    query = 
+      list(
+        `$select` = 'count(record)',
+        `$where`  = 'timestamp > "2010-01-01T00:00:00.000"  AND timestamp <= "2020-01-01T00:00:00.000"',
+        `$limit`  = "1999999999"
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      ),
+  #  write_disk(tmpfs, overwrite = FALSE),
+    progress()
+    )
+```
+
+### Download directly to file
+```{r}
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/eq45-8inv.csv',
+    query = 
+      list(
+        `$select` = 'count(record)',
+        `$where`  = 'timestamp > "2017-03-01T00:00:00.000"  AND timestamp <= "2017-08-01T00:00:00.000"',
+        `$limit`  = "1999999999"
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      ),
+    #write_disk(tmpfs, overwrite = FALSE),
+    progress()
+    )
+```
+```{r}
+  httr::GET(
+    url = 'https://data.cityofchicago.org/resource/eq45-8inv.csv',
+    query = 
+      list(
+       # `$select` = 'count(record)',
+        `$where`  = 'timestamp > "2017-03-01T00:00:00.000"  AND timestamp <= "2017-08-01T00:00:00.000"', #'timestamp > "2010-01-01T00:00:00.000"  AND timestamp <= "2020-01-01T00:00:00.000"',
+        `$order`  = ':id',
+#        `$offset` = "9999999",
+        `$limit`  = "19999999999"
+      ),
+    add_headers(
+      "Accept" = "application/json",
+      "X-App-Token" = keys %>% filter(site == 'socrata.com') %>% pull(app_key)
+      ),
+    write_disk(tmpfs, overwrite = FALSE),
+    progress()
+    )
+```
+
+
+```{r}
+fread(tmpfs, na.strings = c(""), nrows = 10000) %>% glimpse()
+```

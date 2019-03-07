@@ -1,0 +1,117 @@
+---
+title: "R Notebook"
+output: html_notebook
+author: "jan.zymla@renault.com"
+date: "2018--"
+---
+
+```{r}
+library(tidyverse)
+library(purrr)
+library(magrittr)
+library(lubridate)
+library(data.table)
+```
+```{r}
+tr <- fread('../../_CDS_/datasets/chicago/divvy_1M.csv')
+colnames(tr) %<>% str_to_lower() %>% str_replace_all('[^a-z0-9]+', '_')
+head(tr) %>% as.tibble()
+```
+```{r}
+tr[
+  ,
+  `:=`(
+    start_time = mdy_hms(start_time),
+    stop_time = mdy_hms(stop_time)
+  )
+  ,
+]
+```
+
+```{r}
+tr[,.(.N), .(from_station_name, to_station_name)] %>% ggplot() + geom_point(aes(from_station_name, to_station_name, size = log10(N), alpha = N))
+```
+```{r}
+tr[,.(.N), .(from_station_name, to_station_name)] %>% ggplot() + geom_point(aes(from_station_name, to_station_name, size = log10(N), alpha = N))
+```
+
+
+```{r}
+tr[, .(same_pickup_dropoff = (from_station_name == to_station_name)), trip_duration][, .N, .(trip_duration, same_pickup_dropoff)][order(trip_duration), .(cs=cumsum(N), trip_duration),.(same_pickup_dropoff)] %>% ggplot() + geom_line(aes(as.double(trip_duration)/60, cs, color = same_pickup_dropoff)) + xlim(0, 10)
+```
+```{r}
+tr[
+  ,
+  `:=`(
+    dow = wday(start_time),
+    hr = hour(start_time)
+  ),
+][
+  from_station_name != to_station_name,
+  .(.N),
+  .(
+    dow, hr,
+    from_station_name, from_station_id, from_longitude, from_latitude#,
+  #  to_station_name, to_station_name, to_longitude, to_latitude
+  )
+  ][
+    dow == 2,
+    .(
+      Nday = sum(N),
+      N,
+      hr,
+      am = hr <= 12
+    ),
+    .(
+      from_station_name, from_station_id, from_longitude, from_latitude
+    )
+  ] -> st
+```
+
+```{r}
+st[
+    am == TRUE,
+    .(
+      pct_am = sum(N)/Nday*100,
+      Nday
+    ),
+    .(from_station_name, from_station_id, from_longitude, from_latitude)
+  ] %>% 
+  ggplot() +
+  geom_point(aes(from_longitude, from_latitude, size = (Nday), color = pct_am)) + scale_color_gradient2(low = 'green', mid = 'yellow', high = 'red', midpoint = 50)
+
+```
+```{r}
+st[
+    ,
+    .(
+      median_hr = median(as.double(hr)),
+      Nday
+    ),
+    .(from_station_name, from_station_id, from_longitude, from_latitude)
+  ] %>% 
+  ggplot() +
+  geom_point(aes(from_longitude, from_latitude, size = (Nday), color = median_hr)) + scale_color_gradient2(low = 'green', mid = 'yellow', high = 'red', midpoint = 15)
+```
+```{r}
+st[
+    ,
+    .(
+      median_hr = round(median(as.double(hr))),
+      Nday
+    ),
+    .(from_station_name, from_station_id, from_longitude, from_latitude)
+  ] %>% as.tibble() -> st_median_hr
+
+st_median_hr %>% 
+  ggplot() +
+  geom_point(data = select(st_median_hr, -median_hr), aes(from_longitude, from_latitude, size = (Nday)), color = 'gray') + 
+  geom_point(aes(from_longitude, from_latitude, size = (Nday))) + facet_wrap(~median_hr)
+```
+```{r}
+st %>% ggplot() + geom_line(aes(hr, N/Nday, group = from_station_id), alpha = .07)
+```
+```{r}
+st %>% as.tibble() %>% select(-am) %>% spread(hr, N, fill = 0) %>% gather('hr', 'N', `0`:`23`) %>% ggplot() + geom_line(aes(hr, N/Nday, group = from_station_id), alpha = .07)
+```
+

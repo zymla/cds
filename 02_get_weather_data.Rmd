@@ -1,0 +1,49 @@
+---
+title: "R Notebook"
+output: html_notebook
+author: "jan.zymla@renault.com"
+date: "2018--"
+---
+
+```{r}
+library(tidyverse)
+library(purrr)
+library(magrittr)
+library(lubridate)
+library(data.table)
+```
+```{r}
+library(httr)
+library(jsonlite)
+```
+Reads secrets from a `secrets/keys.csv` file that has the following schaema:
+`tribble(~site, ~username, ~app_key, ~secret_key)`
+
+```{r}
+keys <- read_csv('secrets/keys.csv')
+```
+
+```{r}
+resp <- httr::GET(url = 'https://www.ncdc.noaa.gov/cdo-web/api/v2/stations', query = list(offset = 4000, limit = 1000), add_headers("token" = keys %>% filter(site == 'ncdc.noaa.gov') %>% pull(secret_key)))
+resp
+```
+```{r}
+str(resp)
+```
+
+```{r}
+fromJSON(content(resp, 'text'), flatten = TRUE)$results %>% as.tibble() %>% View()
+```
+
+```{r}
+beach_weather <-
+  read_csv("../../_CDS_/datasets/chicago/Beach_Weather_Stations_-_Automated_Sensors.csv") %>% 
+  mutate(date = mdy_hms(`Measurement Timestamp`), mth = floor_date(date, 'month')) %>% 
+  group_by(mth, `Station Name`) %>% tally()
+beach_weather  %>% ggplot() + geom_col(aes(mth, n, group = `Station Name`, fill = `Station Name`))
+```
+
+```{r}
+beach_weather %>% count(`Station Name`)
+```
+

@@ -1,0 +1,66 @@
+---
+title: "06_chicago_data_load"
+output: html_notebook
+author: "jan.zymla@renault.com"
+date: "2019-01-10"
+---
+
+```{r}
+library(tidyverse)
+library(purrr)
+library(magrittr)
+library(lubridate)
+library(data.table)
+```
+
+# Load trips
+
+## Get relevant filename
+```{r}
+trips_filename <- list.files('data_raw', pattern = 'divvy_trips_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
+trips_filename
+```
+
+## Read the file and convert types
+```{r}
+trips <- fread(trips_filename, na.strings = c(""))
+trips[
+  , 
+  `:=`(
+    start_time = as_datetime(start_time),
+    stop_time = as_datetime(stop_time)
+    ), 
+  ]
+setorder(trips, start_time, bike_id)
+glimpse(trips)
+```
+## Get relevant filename
+```{r}
+stations_filename <- list.files('data_raw', pattern = 'divvy_stations_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
+stations_filename
+```
+
+## Read the file and convert types
+```{r}
+stations <- fread(stations_filename, na.strings = c(""))
+stations[
+  , 
+  `:=`(
+    available_bikes  = as.integer(available_bikes),
+    available_docks  = as.integer(available_docks),
+    docks_in_service = as.integer(docks_in_service),
+    latitude         = as.double(latitude),
+    longitude        = as.double(longitude),
+    percent_full     = as.integer(percent_full),
+    timestamp        = as_datetime(timestamp),
+    total_docks      = as.integer(total_docks)
+    ), 
+  ]
+setorder(stations, timestamp, id)
+stations %>% glimpse()
+```
+
+```{r}
+
+```
+

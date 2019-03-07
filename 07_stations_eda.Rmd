@@ -1,0 +1,175 @@
+---
+title: "07_stations_eda"
+output: html_notebook
+author: "jan.zymla@renault.com"
+date: "2019-01-10"
+---
+
+
+
+```{r}
+library(tidyverse)
+library(purrr)
+library(magrittr)
+library(lubridate)
+library(data.table)
+```
+
+
+```{r}
+stations %>% glimpse()
+```
+
+```{r}
+stations[
+    , 
+    .(
+      'max_period' = max(timestamp - lag(timestamp), na.rm = TRUE),
+      'min_period' = min(timestamp - lag(timestamp), na.rm = TRUE)
+      ),
+    .(id, 'd' = as.Date(timestamp) )
+  ][
+    ,
+    .(mi = min(min_period), ma = max(max_period)),
+    d
+  ] %>% 
+  gather('minmax', 'period', mi:ma) %>% 
+  mutate(sampling_period = as.numeric(period)) %>% 
+  ggplot() +
+    geom_point(aes(d, sampling_period, group = minmax, color = minmax), alpha = .1) +
+    scale_y_log10()
+```
+## Docks
+```{r}
+stations[ id < 30
+    , 
+    .(
+      'max_docks' = max(total_docks),
+      'min_docks' = min(total_docks)
+      ),
+    .(id, 'd' = as.Date(timestamp))
+  ] %>% 
+  ggplot() +
+    geom_step(aes(x = d, y = min_docks, group = id, color = as.factor(id))) 
+```
+
+### How prevalent are variations in total_docks numbers?
+```{r}
+stations[
+  ,
+  .(delta_total_docks = total_docks - lag(total_docks)),
+  .(id) #, 'd' = as.Date(timestamp))
+][
+  !is.na(delta_total_docks),
+  .N,
+  .(delta_total_docks)
+][
+  order(-N)
+]
+```
+Not that much!!
+
+
+### How prevalent are stations with docks out of service
+```{r}
+stations[
+  ,
+  .(
+    delta_dis = docks_in_service - lag(docks_in_service),
+    max_dis = max(docks_in_service)
+  ),
+  .(id) #, 'd' = as.Date(timestamp))
+][
+  !is.na(delta_dis),
+  .N,
+  .(delta_dis)
+][ 
+  order(-N)
+]
+```
+### How prevalent are stations with docks out of service
+```{r}
+stations[
+  ,
+  .(
+    pct_dis = docks_in_service / total_docks * 100
+  ),
+  .(id, timestamp)
+] %>% 
+  ggplot() +
+    geom_hex(aes(timestamp, pct_dis))
+```
+### How prevalent are variations in avalable_docks numbers?
+```{r}
+stations[
+  ,
+  .(delta_ad = available_docks - lag(available_docks)),
+  .(id) #, 'd' = as.Date(timestamp))
+][
+  !is.na(delta_ad),
+  .N,
+  .(delta_ad)
+][ 
+  order(-N)
+]
+```
+### How prevalent are variations in available_bikes numbers?
+```{r}
+stations[
+  ,
+  .(delta_ab = available_bikes - lag(available_bikes)),
+  .(id) #, 'd' = as.Date(timestamp))
+][
+  !is.na(delta_ab),
+  .N,
+  .(delta_ab)
+][ 
+  order(-N)
+]
+```
+```{r}
+stations[
+  ,
+  .(
+    pct_ab = available_bikes / total_docks * 100
+  ),
+  .(id, timestamp)
+] %>% 
+  ggplot() +
+    geom_hex(aes(timestamp, pct_ab))
+```
+```{r}
+stations[
+  1:1e6
+  ,
+  .(
+    pct_ab = available_bikes / total_docks * 100,
+    wdt = timestamp - floor_date(timestamp, 'week')
+  ),
+  .(id, timestamp)
+] %>% 
+  ggplot() +
+    geom_hex(aes(wdt, pct_ab))
+```
+
+```{r}
+stations[
+  ,
+  .(
+    pct_ab = available_bikes / total_docks * 100
+  ),
+  .(id, timestamp)
+][
+  ,
+  .(
+    
+  ),
+] %>% 
+  ggplot() +
+    geom_hex(aes(timestamp, pct_ab))
+```
+
+```{r}
+glimpse(stations)
+```
+
