@@ -30,7 +30,7 @@ vols
 ports <- reticulate::dict('5432/tcp' = reticulate::tuple('127.0.0.1', as.integer(1100)))
 ports
 ```
-
+You need to have the `starefossen/pgrouting:latest` docker image available. If you haven't done so already, you need to run in your shell `docker pull starefossen/pgrouting:latest`  beforehand.
 ```{r}
 pg <- client$containers$run(name = 'pg', image = "starefossen/pgrouting:latest", remove = TRUE, ports = ports, volumes = vols, detach = TRUE)
 ```
