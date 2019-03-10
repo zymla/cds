@@ -36,6 +36,9 @@ vols
 ports <- reticulate::dict('5432/tcp' = reticulate::tuple('127.0.0.1', as.integer(1100)))
 ports
 ```
+<<<<<<< HEAD
+You need to have the `starefossen/pgrouting:latest` docker image available. If you haven't done so already, you need to run in your shell `docker pull starefossen/pgrouting:latest`  beforehand.
+=======
 ```{r}
 pwd <- uuid::UUIDgenerate() %>% as.character()
 env <- reticulate::dict('POSTGRES_PASSWORD' = pwd)
@@ -43,6 +46,7 @@ env
 ```
 
 ## Start the container
+>>>>>>> 7653b471b4edcf3d472554c9bcdc308e34c7de1c
 ```{r}
 pg <- client$containers$run(name = 'pg', image = "starefossen/pgrouting:latest", remove = TRUE, ports = ports, volumes = vols, detach = TRUE, environment = env)
 ```
