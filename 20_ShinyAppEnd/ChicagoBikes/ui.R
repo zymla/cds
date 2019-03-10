@@ -30,7 +30,7 @@ shinyUI(dashboardPage(
                               # First tab content : a homepage? to describe data? 
                               #==========================================================================================================================
                               tabItem(tabName = "dashboard", h2("dashboard tab content")#,
-                              #  fluidRow(
+                                      #fluidRow(
                                   
                               #    box(plotOutput("distPlot", height = 200)),
                               #    box(title = "Number of bins", 
@@ -46,18 +46,55 @@ shinyUI(dashboardPage(
                               
                               # First tab content : Jan's stuffs
                               #==========================================================================================================================
-                              tabItem(tabName = "StationsTab", h2("Stations tab content")#,
-                             #         fluidRow(
-                                        
-                            #            box(plotOutput("distPlot", height = 200)),
-                            #            box(title = "Number of bins", 
-                            #                sliderInput("bins",
-                            ##                            "Number of bins:",
-                            #                            min = 1,
-                            #                            max = 50,
-                            #                            value = 30))
-                            #          ) # fluidRow1
-                              ), # tabitem1 
+                              tabItem(tabName = "StationsTab", h2("Clustering des stations"),
+                                    fluidRow(
+                                      box(title = "Inputs (find another name)", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = 3, height = 991,             
+                                          actionButton("flush", label = "Flush data to disk"),
+                                          actionButton("recompute", label = "Recompute"),
+                                          checkboxInput("Mon", "Lundi", TRUE),
+                                          checkboxInput("Tue", "Mardi", TRUE),
+                                          checkboxInput("Wed", "Mercredi", TRUE),
+                                          checkboxInput("Thu", "Jeudi", TRUE),
+                                          checkboxInput("Fri", "Vendredi", FALSE),
+                                          checkboxInput("Sat", "Samedi", FALSE),
+                                          checkboxInput("Sun", "Dimanche", FALSE),
+                                          sliderInput("nb_clusters",  "Nombre de clusters:",  min = 1L,  max = 16L, value = 12L, step = 1L),                                                                                                          
+                                          sliderInput("low_trips_thd",  " Nombre de trajets minimal pour regrouper la station (better word ??):",  min = 10,  max = 1000, value = 500),
+                                          radioButtons("kmeansAlgo", label = "Algorithme k-means", choices = c("Hartigan-Wong", "Lloyd", "Forgy", "MacQueen"), select = "Hartigan-Wong"),
+                                          sliderInput("alpha",  "Valeur de Alpha:",   min = 0,   max = 1,  value = .1),
+                                          sliderInput("hovered_map_zoom",   "Map zoom level (hovered):",   min = 10L, max = 20L,  value = 15L, step = 1L)
+                                          ), # box1
+                                      
+                                      box(title = "Carte des stations", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = 4,
+                                          leafletOutput("stationMap")
+                                           ), # box2  
+                                      
+                                      box(title = "Départs et arrivées en fonction de l'heure", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = 5,
+                                          plotOutput("stationtripratepPlot")
+                                           ), # box3
+                                      
+                                      box(title = "Positions des stations de chaque cluster", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = 9, height = 510, 
+                                          withSpinner(plotlyOutput("latlongclusterPlot"))
+                                          ), # box4
+
+                                      box(title = "Taux journalier d'arrivées et de départs pour chaque cluster", status = "primary", solidHeader = TRUE, collapsible = TRUE, 
+                                          width = 6, height = 520, 
+                                          withSpinner(plotlyOutput("tripratePlot"))
+                                      ), # box5
+                                      
+                                      box(title = "Comparaison des taux journaliers d'arrivées et de départs", status = "primary", solidHeader = TRUE, collapsible = TRUE, 
+                                          width = 6, height = 520, 
+                                          withSpinner(plotlyOutput("triprateclustermeansPlot"))
+                                      ), # box6
+                                      
+                                      box(title = "Positions des stations", status = "primary", solidHeader = TRUE, collapsible = TRUE, 
+                                          width = 9, height = 500, 
+                                          withSpinner(plotlyOutput("triptotalNPlot"))
+                                      ) # box7
+                                      
+                                      
+                                      ) # fluidRow1
+                                ), # tabitem1 
                               
                               
                               
@@ -121,7 +158,7 @@ shinyUI(dashboardPage(
                             
                             # Third tab content : Magda's stuffs  
                             #==========================================================================================================================
-                            tabItem(tabName = "TrajetsGraphTab",
+                            tabItem(tabName = "TrajetsGraphTab",  h2("Graphes des trajets"),
                                     fluidRow(
                                       
                                       column(width = 3, 
