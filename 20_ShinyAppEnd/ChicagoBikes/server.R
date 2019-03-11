@@ -162,11 +162,15 @@ shinyServer(function(input, output) {
   
  
   freact <- reactive({
+    fg <<- fichier_graphe
     co_occ_oriented <- fichier_graphe[
       weekday %in% input$Jours & hr_depart <= input$Choix_heure[2] & hr_depart >= input$Choix_heure[1] & to_station_id != from_station_id, .(from_station_id, to_station_id, N)
       ][
         ,sum(N), by = .(from_station_id,to_station_id)
         ]
+    co <<- co_occ_oriented
+    names(co_occ_oriented) <- c("from_station_id","to_station_id","N")	
+    print("check the names")
     print(head(names))
     
     # Comptage de departs et arrivées
