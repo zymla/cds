@@ -1,0 +1,94 @@
+---
+title: "Quelques stats descriptives"
+author: "Magda Bolewska"
+date: "14 mars 2019"
+output: html_document
+---
+
+Lecture de donnees qui servent pour l etude des graphes de trajets
+```{r}
+library(data.table)
+graphe_stations <- fread("graphes_stations.csv")
+graphes_matrice <- fread("graphes_matrice.csv")
+colnames(graphes_matrice)
+
+```
+
+
+Nombre de stations : 587
+```{r}
+length(unique(graphe_stations$id))
+
+```
+
+
+Nombre moyen de trajets par jour sur toute l'annee : 3829000/365 = 10490.41
+```{r}
+graphes_matrice[,sum(N)]/365
+
+```
+
+
+########################
+
+Repartition de nombre moyen de trajets en fonction du jour de la semaine 
+```{r}
+repart_semaine <- graphes_matrice[,.(Nb_trajets = sum(N)), by=c("weekday")]
+repart_semaine[,compteur:=0]
+
+repart_semaine[weekday=="lundi",compteur:=1]
+repart_semaine[weekday=="mardi",compteur:=2]
+repart_semaine[weekday=="mercredi",compteur:=3]
+repart_semaine[weekday=="jeudi",compteur:=4]
+repart_semaine[weekday=="vendredi",compteur:=5]
+repart_semaine[weekday=="samedi",compteur:=6]
+repart_semaine[weekday=="dimanche",compteur:=7]
+
+setorder(repart_semaine,compteur)
+repart_semaine
+
+repart_semaine[weekday=="lundi",Nb_trajets_moy:=as.numeric(Nb_trajets/53)]
+repart_semaine[weekday!="lundi",Nb_trajets_moy:=as.numeric(Nb_trajets/52)]
+
+
+barplot(repart_semaine$Nb_trajets_moy,main="Nombre moyen de trajets en fonction du jour de la semaine", col="lightblue", names=repart_semaine$weekday)
+
+```
+
+
+Le même barplot mais avec ggplot2
+```{r}
+library(ggplot2)
+p <- ggplot(data=repart_semaine,aes(x=reorder(weekday,compteur),y=Nb_trajets_moy)) + geom_bar(stat="identity", fill="steelblue")+
+  theme(plot.title=element_text(hjust = 0.5)) + labs(title="Nombre moyen de trajets en fonction de jour de la semaine", x="", y="")
+p
+```
+
+
+
+########################
+
+Repartition de nombre moyen de trajets en fonction de l heure de depart
+```{r}
+repart_heure <- graphes_matrice[,.(Nb_trajets = sum(N)), by=c("hr_depart")]
+repart_heure[,Nb_trajets_moy:=as.numeric(Nb_trajets/365)]
+
+
+barplot(repart_heure$Nb_trajets_moy,main="Nombre moyen de trajets en fonction de l'heure de départ", col="lightblue", names=factor(repart_heure$hr_depart))
+?barplot
+```
+
+
+Le même barplot mais avec ggplot2
+```{r}
+library(ggplot2)
+p <- ggplot(data=repart_heure,aes(x=hr_depart,y=Nb_trajets_moy)) + geom_bar(stat="identity", fill="steelblue")+
+  theme(plot.title=element_text(hjust = 0.5)) + labs(title="Nombre moyen de trajets en fonction de l'heure de départ", x="", y="")
+p
+```
+
+
+
+
+
+
