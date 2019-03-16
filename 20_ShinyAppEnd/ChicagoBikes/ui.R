@@ -13,11 +13,11 @@ library(mlxR)
 
 shinyUI(dashboardPage(
             dashboardHeader(title = "Les triplettes de Chicago"),
-              dashboardSidebar(sidebarMenu(menuItem("Dashboard"             , tabName = "dashboard"      , icon = icon("dashboard")),
-                                           menuItem("Stations de Vélos"     , tabName = "StationsTab"    , icon = icon("th")),
-                                           menuItem("Clustering des Trajets", tabName = "TrajetsClusTab" , icon = icon("th")),
-                                           menuItem("Graphe des trajets"    , tabName = "TrajetsGraphTab", icon = icon("th")),
-                                           menuItem("Widgets"               , tabName = "widgets"        , icon = icon("th"))
+              dashboardSidebar(sidebarMenu(menuItem("Dashboard"                 , tabName = "dashboard"      , icon = icon("dashboard")),
+                                           menuItem("Stations de Vélos"         , tabName = "StationsTab"    , icon = icon("th")),
+                                           menuItem("Clustering des Trajets"    , tabName = "TrajetsClusTab" , icon = icon("th")),
+                                           menuItem("Analyse du réseau"         , tabName = "TrajetsGraphTab", icon = icon("th")),
+                                           menuItem("Widgets"                   , tabName = "widgets"        , icon = icon("th"))
                                           ) # sidebarMenu
                 
                 
@@ -46,11 +46,11 @@ shinyUI(dashboardPage(
                               
                               # First tab content : Jan's stuffs
                               #==========================================================================================================================
-                              tabItem(tabName = "StationsTab", h2("Clustering des stations"),
+                              tabItem(tabName = "StationsTab", h2("Analyse des stations"),
                                     fluidRow(
-                                      box(title = "Inputs (find another name)", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = 3, height = 991,             
+                                      box(title = "Paramètres d'entrée", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = 3, height = 991,             
                                           actionButton("flush", label = "Flush data to disk"),
-                                          actionButton("recompute", label = "Recompute"),
+                                          actionButton("recompute", label = "Re-calcul"),
                                           checkboxInput("Mon", "Lundi", TRUE),
                                           checkboxInput("Tue", "Mardi", TRUE),
                                           checkboxInput("Wed", "Mercredi", TRUE),
@@ -62,7 +62,7 @@ shinyUI(dashboardPage(
                                           sliderInput("low_trips_thd",  " Nombre de trajets minimal pour regrouper la station (better word ??):",  min = 10,  max = 1000, value = 500),
                                           radioButtons("kmeansAlgo", label = "Algorithme k-means", choices = c("Hartigan-Wong", "Lloyd", "Forgy", "MacQueen"), select = "Hartigan-Wong"),
                                           sliderInput("alpha",  "Valeur de Alpha:",   min = 0,   max = 1,  value = .1),
-                                          sliderInput("hovered_map_zoom",   "Map zoom level (hovered):",   min = 10L, max = 20L,  value = 15L, step = 1L)
+                                          sliderInput("hovered_map_zoom",   "Niveau de zoom de la carte:",   min = 10L, max = 20L,  value = 15L, step = 1L)
                                           ), # box1
                                       
                                       box(title = "Carte des stations", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = 4,
@@ -102,12 +102,69 @@ shinyUI(dashboardPage(
                               
                               # Second tab content : Anissa's stuffs
                               #===========================================================================================================================
+                              tabItem(tabName = "TrajetsClusTab" ,  h2("Widgets tab content"),
+                                      fluidRow(
+                                        column(width = 4,
+                                               box(
+                                                 title = " 1 Extraction des données du site divyy", width = NULL, status = "primary",
+                                                 "site web divyy,
+                                                  2 jeux de données : relevé des stations et des trajets, 
+                                                  année 2017, XX Go, 
+                                                 XX stations, XX trajets/jour/moyenne"
+                                               ),
+                                               box(
+                                                 title = "Contenu de la base stations", width = NULL, solidHeader = TRUE, status = "primary",
+                                                 "identifiant, localisation geographique, capacité, disponibilité des vélos, statut de fonctionnement des bornes, le tout horodaté, 
+                                                 "
+                                               ),
+                                               box(
+                                                 title = "Contenu de la base des trajets", width = NULL, background = "black",
+                                                 "Identifiant des stations de départ et d'arrivée, localisation des stations de départ et d'arrivée, heures
+                                                 d'arrivée et de départ, durée du trajet, identifiant du vélo et identifiant du trajet, statut d'abonnement du cycliste, 
+                                                 si abonné information sur l'age et le sexe"
+                                               )
+                                        ),
+                                        
+                                        column(width = 4,
+                                               box(
+                                                 status = "warning", width = NULL,
+                                                 "Box content"
+                                               ),
+                                               box(
+                                                 title = "Title 3", width = NULL, solidHeader = TRUE, status = "warning",
+                                                 "Box content"
+                                               ),
+                                               box(
+                                                 title = "Title 5", width = NULL, background = "light-blue",
+                                                 "A box with a solid light-blue background"
+                                               )
+                                        ),
+                                        
+                                        column(width = 4,
+                                               box(
+                                                 title = "Title 2", width = NULL, solidHeader = TRUE,
+                                                 "Box content"
+                                               ),
+                                               box(
+                                                 title = "Title 6", width = NULL, background = "maroon",
+                                                 "A box with a solid maroon background"
+                                               )
+                                        ) # column 3
+                                      )
+ 
+                        
+                                       ),  # tabitem2      
+                            
+                            
+                            
+                              # Third tab content : random stuffs
+                              #===========================================================================================================================
                               tabItem(tabName = "widgets",  h2("Widgets tab content"),
                                       fluidRow(
                                         column(width = 4,
                                                box(
                                                  title = "Box title", width = NULL, status = "primary",
-                                                 "Box content"
+                                                 "Données 2017"
                                                ),
                                                box(
                                                  title = "Title 1", width = NULL, solidHeader = TRUE, status = "primary",
@@ -145,24 +202,21 @@ shinyUI(dashboardPage(
                                                )
                                         ) # column 3
                                       )
- 
-                        
-                                       ),  # tabitem2      
-                            
-                            
-                            
-                            
+                                      
+                                      
+                              ),  # tabitem2      
+                              
                             
                             
                             
                             
                             # Third tab content : Magda's stuffs  
                             #==========================================================================================================================
-                            tabItem(tabName = "TrajetsGraphTab",  h2("Graphes des trajets"),
+                            tabItem(tabName = "TrajetsGraphTab",  h2("Analyse du réseau"),
                                     fluidRow(
                                       
                                       column(width = 3, 
-                                        box(title = "Inputs (find another name)", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = NULL, 
+                                        box(title = "Paramètres d'entrée", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = NULL, 
                                           checkboxGroupInput("Jours", label = "Jours",
                                                                  choices=c("Lundi"= "lundi",  "Mardi"="mardi", "Mercredi"="mercredi",  "Jeudi"="jeudi",
                                                                            "Vendredi"="vendredi",  "Samedi"="samedi", "Dimanche"="dimanche"),
@@ -177,7 +231,7 @@ shinyUI(dashboardPage(
                                         ), # column 1
                                       
                                       column(width = 5,
-                                            box(title = "Graphes", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = NULL, setBackgroundColor("#EBEBEB"),
+                                            box(title = "Visualisation des trajets", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = NULL, setBackgroundColor("#EBEBEB"),
                                                 height = 608, 
                                             visNetworkOutput('Graphe_trajets')), 
                                             
@@ -205,7 +259,7 @@ shinyUI(dashboardPage(
                                             ), # column 2
                                       
                                       column(width = 4,
-                                            box(title = "Carte", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = NULL, height = 850, 
+                                            box(title = "Emplacement des stations", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = NULL, height = 850, 
                                             column(width = 12,
                                                    tags$style(type = "text/css", "#Carte_stations {height: calc(80vh) !important;}"),
                                                    leafletOutput('Carte_stations'))
