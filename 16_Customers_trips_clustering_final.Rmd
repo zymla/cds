@@ -1,0 +1,317 @@
+---
+title: "1_Stat_des_customers_2017"
+output: html_document
+---
+Faire une variante ? 1 seul trajet / > 1 trajet / tous 
+Checker si c'est du bruit ou pas.
+
+
+
+```{r}
+library(data.table)
+library(magrittr)
+library(tidyverse)  # data manipulation
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering algorithms & visualization
+library(gridExtra)
+library(LICORS)
+library(leaflet)
+library(FactoMineR)
+library(dbscan)
+
+```
+
+
+#### Présentation du programme
+# Etape 1 : on exclus les (trajets-jours) avec un seul trajet réalisé
+# Etape 2 : Clustering k-means
+# Etape 3 : CAH
+# Etape 4 : ACP + CAH
+
+
+#### Appel de la base
+
+```{r}
+
+  # Appel de la 1ère base de travail : 1 ligne = 1 trajet
+  # Pour chaque trajet on a des informations caractérisant ce trajet, les stations d'arrivée et de départ
+trajets <- readRDS("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/fichier_anissa/trajets.rda")
+
+  # Appel de la 2ème base de travail : 1 ligne = 1 station
+  # Décrit pour chaque station son nom et sa localisation géographique
+des_trajets <- readRDS("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/fichier_anissa/des_trajets.rda")
+
+```
+
+
+Construction de la base de travail
+
+=> Elle dépendra de 2 paramètres choisis par l'utilisateur : le jour et le type de trajets (unique/pas unique/tous) 
+
+```{r}
+
+# SELECTIONNER LE JOUR (wday_n) : 1: dimanche, 2: lundi... 7: samedi
+
+# SELECTIONNER D'EXCLURE OU NON LES TRAJETS AVEC 1 TRIP (filtre sur la variable nb_trips)
+# Tous les trajets    : nb_trips > 0
+# Sans trajets unique : nb_trips > 1
+# Trajets uniques     : nb_trips = 1
+
+# SELECTIONNER LES VARIABLES (on créera le vecteur maselec)
+# La sélection maximale :
+#"nb_trips", "pct_abonne","moy_from_bikes","moy_to_bikes","moy_from_trips","moy_to_trips","from_nbst_300m","to_nbst_300m","from_nbst_1km","to_nbst_1km","from_nbst_2km","to_nbst_2km","moy_distHav","moy_trip_duration","start_moy_total_docks","start_moy_docks_in_service","start_moy_available_docks","start_moy_available_bikes","start_moy_pct_full","start_moy_pct_full_av","stop_moy_total_docks","stop_moy_docks_in_service","stop_moy_available_docks","stop_moy_available_bikes","stop_moy_pct_full","stop_moy_pct_full_av"
+
+# Construction des 2 tables de travail
+# La première sur laquelle on réalise l'analyse
+# La deuxième qui nous permettra d'identifier les trajets 
+
+# Ici exemple : 
+# on travaille sur dimanche : jour=1
+jour <- 1
+# sur tous les trajets (unique,nonunique,tous) : 
+unique <- "tous"
+# et une sous-selection de variables : maselec
+
+maselec <- c("nb_trips", "pct_abonne",
+"moy_from_bikes","moy_to_bikes","moy_from_trips","moy_to_trips",
+"from_nbst_300m","to_nbst_300m","from_nbst_1km","to_nbst_1km",
+"moy_distHav","moy_trip_duration",
+"start_moy_total_docks","start_moy_docks_in_service","start_moy_available_docks","start_moy_pct_full",
+"stop_moy_total_docks","stop_moy_docks_in_service","stop_moy_available_docks","stop_moy_pct_full")
+
+if (unique == "tous"){
+  trajets_cl<-copy(trajets[wday_n == 1 & nb_trips > 0 ,maselec, with=FALSE])
+  trajets_id<-copy(trajets[wday_n == 1 & nb_trips > 0 ,c("trajet_id")])
+} else {
+    if (unique == "nonunique"){
+      trajets_cl<-copy(trajets[wday_n == 1 & nb_trips > 1 ,maselec, with=FALSE])
+      trajets_id<-copy(trajets[wday_n == 1 & nb_trips > 1 ,c("trajet_id")])
+    }else{
+            # Si l'utilisateur a choisit de ne travailler que sur le strajets uniques, 
+            # il faut s'assurer que la table ne tienne pas compte de la variable nb_trips
+          trajets_cl<-copy(trajets[wday_n == 1 & nb_trips == 1 ,maselec, with=FALSE])
+          if (is.na(match("nb_trips",names(trajets_cl)))==FALSE) {
+              trajets_cl<-trajets_cl[,-c("nb_trips")]
+          }
+          trajets_id<-copy(trajets[wday_n==1 & nb_trips == 1 ,c("trajet_id")])
+    }
+}
+
+```
+
+Question : est-ce qu'uk ets possible de fair evarier les méthodes sans avoir à systématiquement choisr les varriables à chaque fois
+Et faire en sorte que les deux tables trajets_cl et trajet_id soient modifiées dès lors que l'utilisateur modifie le choix de varoables ?
+
+
+    # Proposer à l'utilisateur plusieurs choix d'algorithmes
+    #     K-means avec l'algorithme "Hartigan-Wong" 
+    #     K-means ++ avec sélection des centroïdes de manière aléatoires
+    #     DBSCAN
+    #     ACP + CAH
+    
+    # Dessiner les classes sur la carte de Chicago plutôt que le cluster
+
+
+METHODE 1 : K-means
+
+```{r}
+
+# FAIRE CHOISIR LE NOMBRE DE CLASSES : entre 1 et 15 (on créera la variable nbcl)
+# FAIRE CHOISIR L'ALGORITHME         : "Hartigan-Wong", "Lloyd", "Forgy","MacQueen" (on créer la variable algo)
+
+# Exemple avec 6 classes
+nbcl <- 6
+
+# Exemple avec l'algo de MacQueen
+algo <- "MacQueen"
+
+set.seed(12345)
+
+  # nb de classes comme paramètre de centers
+km_hw<- kmeans(scale(trajets_cl,center=T,scale=T),centers=nbcl,iter.max=2000, algorithm = algo,nstart=50)
+
+# Ajout des coordonnéees géographiques pour la visualisation graphique des classes
+trajets_res <- cbind.data.frame(trajets_cl,trajets_id,cl_km_hw=factor(km_hw$cluster))
+trajets_res <- merge(trajets_res,des_trajets,by=c("trajet_id"),all.x=TRUE)
+rm(km_hw)
+
+# Mise ne forme des graphiques : j'aimerais bien que quand on passe la souris sur un point on ait un affichage de la station, du nom du trajet, longutude te latitude
+
+# Taille des classes
+print(paste("Effectifs des ",nbcl," classes"))
+Eff_trajets <- as.data.table(table(trajets_res[,cl_km_hw]))
+Eff_trajets[,Pct:=round((N/sum(N))*100)]
+setnames(Eff_trajets,"V1","N° de classe")
+setnames(Eff_trajets,"N","Nombre de trajets")
+setnames(Eff_trajets,"Pct","%")
+print(Eff_trajets)
+rm(Eff_trajets)
+
+# Je n'ai as réussi à ajouter dans la fonction aes, après colr = cl_km_hw, les infos pour afficher pour chaque point le numéro de la classe, nom de la station, longitude, latitude
+# Ligne de code qui marche pas
+# text = paste("Classe: ", cl_km_hw, '<br>',"Station:", to_station_name,'<br>', "Longitude:",to_longitude,'<br>',"Latitude:",to_latitude)
+
+
+from <- trajets_res[] %>% 
+        ggplot() +
+        geom_point(data = trajets_res[, .(from_longitude, from_latitude)], aes(from_longitude, from_latitude),
+                    color = 'gray') +
+        geom_point(aes(from_longitude, from_latitude, color = cl_km_hw, text = paste("Classe: ", cl_km_hw, '<br>',"Station:", from_station_name,'<br>', "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
+        labs(x="Longitude",y="Latitude",cl_km_hw="Classes")+
+        labs(title = paste("Visualisation des ",nbcl,"classes de trajets"), subtitle = "Selon la station de départ")+
+        facet_wrap(~cl_km_hw)
+
+from
+
+to <- trajets_res[] %>% 
+      ggplot() +
+      geom_point(data = trajets_res[, .(to_longitude, to_latitude)], aes(to_longitude, to_latitude),
+                 color = 'gray') +
+      geom_point(aes(to_longitude, to_latitude, color = cl_km_hw,text = paste("Classe: ", cl_km_hw, '<br>',"Station:", from_station_name,'<br>', "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
+      labs(x="Longitude",y="Latitude",color="Classes") +
+      labs(title = paste("Visualisation des ",nbcl,"classes de trajets"), subtitle = "Selon la station d'arrivée")+
+      facet_wrap(~cl_km_hw)
+to   
+
+rm(from,to)
+rm(trajets_res)
+```
+
+
+
+METHODE 2 : K-means ++
+
+
+```{r}
+# FAIRE CHOISIR LE NOMBRE DE CLASSES : entre 1 et 15 (on créera la variable nbcl)
+# FAIRE CHOISIR L'ALGORITHME         : "Hartigan-Wong", "Lloyd", "Forgy","MacQueen" (on créer la variable algo)
+# PAR DEFAUT : le choix des centres de départ est aléatoire
+
+# Exemple avec 6 classes
+nbcl <- 6
+
+# Exemple avec l'algo de MacQueen
+algo <- "MacQueen"
+
+
+set.seed(12345)
+
+kmpp_hw <- kmeanspp(scale(trajets_cl,center=T,scale=T), k = nbcl, start = "random", iter.max = 1000, nstart = 20, algorithm=algo)
+
+# Ajout des coordonnéees géographiques pour la visualisation graphique des classes
+trajets_res <- cbind.data.frame(trajets_cl,trajets_id,cl_kmpp_hw=factor(kmpp_hw$cluster))
+trajets_res <- merge(trajets_res,des_trajets,by=c("trajet_id"),all.x=TRUE)
+rm(kmpp_hw)
+
+# Taille des classes
+print(paste("Effectifs des ",nbcl," classes"))
+Eff_trajets <- as.data.table(table(trajets_res[,cl_kmpp_hw]))
+Eff_trajets[,Pct:=round((N/sum(N))*100)]
+setnames(Eff_trajets,"V1","N° de classe")
+setnames(Eff_trajets,"N","Nombre de trajets")
+setnames(Eff_trajets,"Pct","%")
+print(Eff_trajets)
+rm(Eff_trajets)
+
+
+# Je n'ai as réussi à ajouter dans la fonction aes, après colr = cl_kmpp_hw, les infos pour afficher pour chaque point le numéro de la classe, nom de la station, longitude, latitude
+# Ligne de code qui marche pas
+# text = paste("Classe: ", cl_kmpp_hw, '<br>',"Station:", to_station_name,'<br>', "Longitude:",to_longitude,'<br>',"Latitude:",to_latitude)
+
+
+from <- trajets_res[] %>% 
+        ggplot() +
+        geom_point(data = trajets_res[, .(from_longitude, from_latitude)], aes(from_longitude, from_latitude),
+                    color = 'gray') +
+        geom_point(aes(from_longitude, from_latitude, color = cl_kmpp_hw, text = paste("Classe: ", cl_kmpp_hw, '<br>',"Station:", from_station_name,'<br>', "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
+        labs(x="Longitude",y="Latitude",cl_kmpp_hw="Classes")+
+        labs(title = paste("Visualisation des ",nbcl,"classes de trajets"), subtitle = "Selon la station de départ")+
+        facet_wrap(~cl_kmpp_hw)
+
+from
+
+to <- trajets_res[] %>% 
+      ggplot() +
+      geom_point(data = trajets_res[, .(to_longitude, to_latitude)], aes(to_longitude, to_latitude),
+                 color = 'gray') +
+      geom_point(aes(to_longitude, to_latitude, color = cl_kmpp_hw,text = paste("Classe: ", cl_kmpp_hw, '<br>',"Station:", from_station_name,'<br>', "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
+      labs(x="Longitude",y="Latitude",color="Classes") +
+      labs(title = paste("Visualisation des ",nbcl,"classes de trajets"), subtitle = "Selon la station d'arrivée")+
+      facet_wrap(~cl_kmpp_hw)
+to   
+
+rm(from,to)
+rm(trajets_res)
+```
+
+
+
+
+METHODE 3 : DBSCAN
+
+```{r}
+# FAIRE CHOISIR LA VALEUR DE minPts (taille min du voisinage d'un point) : ch_minPts
+# choix de eps optimum (k plus proche voisin, on prend la valeur de MinPts pour k)
+# Pour MintPts : on prend la valeur de 4
+# on cherche quel est le epsilon optimum par la méthode du coude
+
+# Exemple : on prend 7
+ch_minPts <- 7
+
+dbscan::kNNdistplot(scale(trajets_cl,center=T,scale=T),k=ch_minPts)
+averageDist <- colMeans(dbscan::kNNdist(scale(trajets_cl,center=T,scale=T),k=ch_minPts))
+eps_opt<-mean(averageDist)
+
+res_dbscan <- dbscan::dbscan(scale(trajets_cl,center=T,scale=T),eps=eps_opt,minPts=ch_minPts)
+#db6 <-fviz_cluster(res_dbscan, geom = "point", data = trajets_cl)
+
+rm(eps_opt,averageDist)
+
+# Ajout des coordonnéees géographiques pour la visualisation graphique des classes
+trajets_res <- cbind.data.frame(trajets_cl,trajets_id,cl_dbscan=factor(res_dbscan$cluster))
+trajets_res <- merge(trajets_res,des_trajets,by=c("trajet_id"),all.x=TRUE)
+
+# Taille des classes
+print(paste("Effectifs des ",max(res_dbscan$cluster)," classes"))
+Eff_trajets <- as.data.table(table(trajets_res[,cl_dbscan]))
+Eff_trajets[,Pct:=round((N/sum(N))*100)]
+setnames(Eff_trajets,"V1","N° de classe")
+setnames(Eff_trajets,"N","Nombre de trajets")
+setnames(Eff_trajets,"Pct","%")
+print(Eff_trajets)
+rm(Eff_trajets)
+
+
+# Je n'ai pas réussi à ajouter dans la fonction aes, après colr = cl_kmpp_hw, les infos pour afficher pour chaque point le numéro de la classe, nom de la station, longitude, latitude
+# Ligne de code qui marche pas
+# text = paste("Classe: ", cl_kmpp_hw, '<br>',"Station:", to_station_name,'<br>', "Longitude:",to_longitude,'<br>',"Latitude:",to_latitude)
+
+
+from <- trajets_res[] %>% 
+        ggplot() +
+        geom_point(data = trajets_res[, .(from_longitude, from_latitude)], aes(from_longitude, from_latitude),
+                    color = 'gray') +
+        geom_point(aes(from_longitude, from_latitude, color = cl_dbscan, text = paste("Classe: ", cl_dbscan, '<br>',"Station:", from_station_name,'<br>', "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
+        labs(x="Longitude",y="Latitude",cl_dbscan="Classes")+
+        labs(title = paste("Visualisation des ",max(res_dbscan$cluster),"classes de trajets"), subtitle = "Selon la station de départ")+
+        facet_wrap(~cl_dbscan)
+
+from
+
+to <- trajets_res[] %>% 
+      ggplot() +
+      geom_point(data = trajets_res[, .(to_longitude, to_latitude)], aes(to_longitude, to_latitude),
+                 color = 'gray') +
+      geom_point(aes(to_longitude, to_latitude, color = cl_dbscan,text = paste("Classe: ", cl_dbscan, '<br>',"Station:", from_station_name,'<br>', "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
+      labs(x="Longitude",y="Latitude",color="Classes") +
+      labs(title = paste("Visualisation des ",max(res_dbscan$cluster),"classes de trajets"), subtitle = "Selon la station d'arrivée")+
+      facet_wrap(~cl_dbscan)
+to   
+
+rm(from,to)
+rm(res_dbscan)
+rm(trajets_res)
+#revoir db
+```
+
+METHODE 4 : A venir...

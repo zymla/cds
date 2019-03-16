@@ -22,7 +22,7 @@ library(stringr)
 
 rm(trips)
 
-trips_filename <- list.files('data_raw', pattern = 'divvy_trips_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
+trips_filename <- list.files('data_raw', pattern = 'divvy_trips_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv$', full.names = TRUE) %>% max()
 trips_filename
 
 trips <- fread(trips_filename, na.strings = c(""))
@@ -30,7 +30,7 @@ trips <- fread(trips_filename, na.strings = c(""))
 trips$from_station_id <- as.character(trips$from_station_id)
 trips$to_station_id <- as.character(trips$to_station_id)
 
-trips[, weekday := lubridate::wday(start_time, label=TRUE, abbr = FALSE)]
+trips[, weekday := lubridate::wday(start_time, label=TRUE, abbr = FALSE, locale = 'French')]
 trips[, hr_depart := hour(as_datetime(start_time))]
 
 fichier_graphe <- trips[,.N, by= . (from_station_id, to_station_id, weekday, hr_depart )]
@@ -45,7 +45,7 @@ La base des trajets de 2017 a 3 829 000 lignes.
 ```{r}
 rm(stations)
 
-stations_filename <- list.files('data_raw', pattern = 'divvy_stations_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv', full.names = TRUE) %>% max()
+stations_filename <- list.files('data_raw', pattern = 'divvy_stations_[0-9]{4}(_[0-9]{2}){2}_.*\\.csv$', full.names = TRUE) %>% max()
 stations_filename
 stations <- fread(stations_filename, na.strings = c("")) 
 

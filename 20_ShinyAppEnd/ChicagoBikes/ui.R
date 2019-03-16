@@ -8,6 +8,11 @@
 #
 
 library(shinydashboard)
+library(shinycssloaders)
+library(shinyWidgets)
+library(visNetwork)
+library(leaflet)
+library(plotly)
 library(mlxR)
 
 

@@ -16,15 +16,15 @@ library(leaflet)
 library(tictoc)
 library(plotly)
 library(scales)
-
+library(igraph)
 
 
 
 
 # Magda's stuffs : Lecture et mise en forme de fichiers
 #------------------------------------------------------------------------------------
-fichier_graphe <- fread("graphes_matrice.csv")
-fichier_stations <- fread("graphes_stations.csv")
+fichier_graphe <- fread("../../graphes_matrice.csv")
+fichier_stations <- fread("../../graphes_stations.csv")
 fichier_graphe$from_station_id <- as.character(fichier_graphe$from_station_id)
 fichier_graphe$to_station_id <- as.character(fichier_graphe$to_station_id)
 fichier_stations$id <- as.character(fichier_stations$id)
@@ -56,7 +56,7 @@ wdays <-
         order(wday_n), 
         .(wday_n, wday_abr)
         ]
-
+print(getwd())
 if(length(list.files('.', pattern = 'station_movements.rds'))){
   station_movements <- read_rds('./station_movements.rds')
 } else {
@@ -162,13 +162,14 @@ shinyServer(function(input, output) {
   
  
   freact <- reactive({
-    
+    fg <<- fichier_graphe
     co_occ_oriented <- fichier_graphe[
       weekday %in% input$Jours & hr_depart <= input$Choix_heure[2] & hr_depart >= input$Choix_heure[1] & to_station_id != from_station_id, .(from_station_id, to_station_id, N)
       ][
         ,sum(N), by = .(from_station_id,to_station_id)
         ]
-    names(co_occ_oriented) <- c("from_station_id","to_station_id","N")
+    co <<- co_occ_oriented
+    names(co_occ_oriented) <- c("from_station_id","to_station_id","N")	
     print("check the names")
     print(head(names))
     
@@ -185,6 +186,8 @@ shinyServer(function(input, output) {
     
     # Paramètrage du graphe : poids des différents trajets
     edges <- as_ids(E(g))
+    
+    print('Head of edges')
     print(head(edges))
     edges_mat<- do.call("rbind",strsplit(edges,"\\|"))
     edges_df <- data.frame(edges_mat,stringsAsFactors = F)
