@@ -18,7 +18,6 @@ library(LICORS)
 library(leaflet)
 library(FactoMineR)
 library(dbscan)
-
 ```
 
 
@@ -314,4 +313,186 @@ rm(trajets_res)
 #revoir db
 ```
 
-METHODE 4 : A venir...
+METHODE 4 : ALGORITHME CLARA (PAM ne fonctionne pas bien sur grands volumes)
+
+```{r}
+
+# FAIRE CHOISIR LE NOMBRE DE CLASSES : entre 1 et 15 (on créera la variable nbcl)
+
+# FAIRE CHOISIR LA DISTANCE METRIQUE : "euclidean", "manhattan", "jaccard" (on créera la variable distm)
+
+distm <- "euclidean"
+
+# Exemple avec 6 classes
+nbcl <- 6
+
+
+set.seed(12345)
+
+clara <- clara(scale(trajets_cl,center=T,scale=T),metric = distm, pamLike =TRUE,stand=TRUE, samples=500,nbcl)
+
+# Ajout des coordonnéees géographiques pour la visualisation graphique des classes
+trajets_res <- cbind.data.frame(trajets_cl,trajets_id,cl_clara=factor(clara$clustering))
+trajets_res <- merge(trajets_res,des_trajets,by=c("trajet_id"),all.x=TRUE)
+rm(clara)
+
+# Mise ne forme des graphiques : j'aimerais bien que quand on passe la souris sur un point on ait un affichage de la station, du nom du trajet, longutude te latitude
+
+# Taille des classes
+print(paste("Effectifs des ",nbcl," classes"))
+Eff_trajets <- as.data.table(table(trajets_res[,cl_clara]))
+Eff_trajets[,Pct:=round((N/sum(N))*100)]
+setnames(Eff_trajets,"V1","N° de classe")
+setnames(Eff_trajets,"N","Nombre de trajets")
+setnames(Eff_trajets,"Pct","%")
+print(Eff_trajets)
+rm(Eff_trajets)
+
+# Je n'ai as réussi à ajouter dans la fonction aes, après colr = cl_clara, les infos pour afficher pour chaque point le numéro de la classe, nom de la station, longitude, latitude
+# Ligne de code qui marche pas
+# text = paste("Classe: ", cl_clara, '<br>',"Station:", to_station_name,'<br>', "Longitude:",to_longitude,'<br>',"Latitude:",to_latitude)
+
+from <- trajets_res[] %>% 
+        ggplot() +
+        geom_point(data = trajets_res[, .(from_longitude, from_latitude)], aes(from_longitude, from_latitude),
+                    color = 'gray') +
+        geom_point(aes(from_longitude, from_latitude, color = cl_clara, text = paste("Classe: ", cl_clara, '<br>',"Station:", from_station_name,'<br>', "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
+        labs(x="Longitude",y="Latitude",color="Classes")+
+        labs(title = paste("Visualisation des ",nbcl,"classes de trajets"), subtitle = "Selon la station de départ")+
+        facet_wrap(~cl_clara)
+
+from
+
+to <- trajets_res[] %>% 
+      ggplot() +
+      geom_point(data = trajets_res[, .(to_longitude, to_latitude)], aes(to_longitude, to_latitude),
+                 color = 'gray') +
+      geom_point(aes(to_longitude, to_latitude, color = cl_clara,text = paste("Classe: ", cl_clara, '<br>',"Station:", from_station_name,'<br>', "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
+      labs(x="Longitude",y="Latitude",color="Classes") +
+      labs(title = paste("Visualisation des ",nbcl,"classes de trajets"), subtitle = "Selon la station d'arrivée")+
+      facet_wrap(~cl_clara)
+to   
+
+rm(from,to)
+rm(trajets_res)
+rm(distm,nbcl)
+```
+
+METHODE 5 : 
+
+```{r}
+# A TESTER par PC de Magda
+# --------------------------------------------------------------------------------------
+
+# FAIRE CHOISIR LE NOMBRE DE CLASSES : entre 1 et 15 (on créera la variable nbcl)
+# FAIRE CHOISIR LE NOMBRES D'AXES A CONSERVER : 50%, 60%, 70%, 80%, 90%, 100% (on créera la # variable choixvp qui variera entre 1 (pour 50%) et 11 pour 100% 
+#  1 pour 50%, 2 pour 55%, 3 pour 60%, 4 pour 65%...
+
+# Exemple avec 6 classes
+nbcl <- 6
+
+# Exemple avec choix de garder 90% des axes
+choixvp <- 9
+
+set.seed(12345)
+
+# Nombre d'axes issues de l'ACP à conserver pour la CAH
+# On réalise l'ACP avec l'ensemble des axes et on récupère la distribution des vp
+pca <- PCA(scale(trajets_cl,center=T,scale=T),ncp=Inf,graph=FALSE)
+
+vp <- as.data.table(pca$eig[,3])
+
+vp[,obs:=as.numeric(rownames(vp))]
+vp[,lag_Cumvp := shift(.SD, 1, 0, "lag"), .SDcols=c("V1")]
+vp[,Cumvp := V1]
+vp[,c("V1"):=NULL]
+vp[,vp50 := ( Cumvp > 50 & lag_Cumvp  <= 50) ] 
+vp[,vp55 := ( Cumvp > 55 & lag_Cumvp  <= 55) ] 
+vp[,vp60 := ( Cumvp > 60 & lag_Cumvp  <= 60) ]
+vp[,vp65 := ( Cumvp > 65 & lag_Cumvp  <= 65) ] 
+vp[,vp70 := ( Cumvp > 70 & lag_Cumvp  <= 70) ]
+vp[,vp75 := ( Cumvp > 75 & lag_Cumvp  <= 75) ] 
+vp[,vp80 := ( Cumvp > 80 & lag_Cumvp  <= 80) ] 
+vp[,vp85 := ( Cumvp > 85 & lag_Cumvp  <= 85) ]
+vp[,vp90 := ( Cumvp > 90 & lag_Cumvp  <= 90) ] 
+vp[,vp95 := ( Cumvp > 95 & lag_Cumvp  <= 95) ]
+
+
+nbvp <- switch (choixvp,
+    "1" = vp[vp50 == TRUE,obs],
+    "2" = vp[vp55 == TRUE,obs],
+    "3" = vp[vp60 == TRUE,obs],
+    "4" = vp[vp65 == TRUE,obs],
+    "5" = vp[vp70 == TRUE,obs],
+    "6" = vp[vp75 == TRUE,obs],
+    "7" = vp[vp80 == TRUE,obs],
+    "8" = vp[vp85 == TRUE,obs],
+    "9" = vp[vp90 == TRUE,obs],
+    "10" = vp[vp95 == TRUE,obs],
+    "11" = vp[vp60 == TRUE,obs]
+)
+
+
+
+# Mise en oeuvre de la Cah
+
+# On réalise l'ACP avec l'ensemble des axes en ne conservant que le nb d'axes choisis (paramètre nbvp)
+pca <- PCA(scale(trajets_cl,center=T,scale=T),ncp=nbvp,graph=FALSE)
+
+# Pour la CAH on donne en paramètre le nombre de classes (nbcl), le nb d'axes à conserver (nbvp)
+cah <- HCPC(pca, nb.clust = nbcl,consol = FALSE,graph=FALSE,method="ward",iter.max = 1000)
+cah_clopt <- HCPC(pca, min=1,max=15,consol = FALSE,graph=FALSE,method="ward",iter.max = 1000)
+
+print(paste("Inertie totale conservée : ",vp[obs==nbvp,Cumvp]))
+print(paste("Nombre de classes optimales suggéré : ",cah_clopt$call$t$nb.clust))
+rm(cah_clopt)
+rm(choixvp,nbvp,vp)
+
+# Ajout des coordonnéees géographiques pour la visualisation graphique des classes
+trajets_res <- cbind.data.frame(trajets_cl,trajets_id,cl_cah=factor(cah$data.clust$clust))
+trajets_res <- merge(trajets_res,des_trajets,by=c("trajet_id"),all.x=TRUE)
+rm(pca, cah)
+
+# Mise en forme des graphiques : j'aimerais bien que quand on passe la souris sur un point on ait un affichage de la station, du nom du trajet, longutude te latitude
+
+# Taille des classes
+print(paste("Effectifs des ",nbcl," classes"))
+Eff_trajets <- as.data.table(table(trajets_res[,cl_cah]))
+Eff_trajets[,Pct:=round((N/sum(N))*100)]
+setnames(Eff_trajets,"V1","N° de classe")
+setnames(Eff_trajets,"N","Nombre de trajets")
+setnames(Eff_trajets,"Pct","%")
+print(Eff_trajets)
+rm(Eff_trajets)
+
+# Je n'ai as réussi à ajouter dans la fonction aes, après colr = cl_pca, les infos pour afficher pour chaque point le numéro de la classe, nom de la station, longitude, latitude
+# Ligne de code qui marche pas
+# text = paste("Classe: ", cl_pca, '<br>',"Station:", to_station_name,'<br>', "Longitude:",to_longitude,'<br>',"Latitude:",to_latitude)
+
+
+from <- trajets_res[] %>% 
+        ggplot() +
+        geom_point(data = trajets_res[, .(from_longitude, from_latitude)], aes(from_longitude, from_latitude),
+                    color = 'gray') +
+        geom_point(aes(from_longitude, from_latitude, color = cl_cah, text = paste("Classe: ", cl_cah, '<br>',"Station:", from_station_name,'<br>', "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
+        labs(x="Longitude",y="Latitude",color="Classes")+
+        labs(title = paste("Visualisation des ",nbcl,"classes de trajets"), subtitle = "Selon la station de départ")+
+        facet_wrap(~cl_cah)
+
+from
+
+to <- trajets_res[] %>% 
+      ggplot() +
+      geom_point(data = trajets_res[, .(to_longitude, to_latitude)], aes(to_longitude, to_latitude),
+                 color = 'gray') +
+      geom_point(aes(to_longitude, to_latitude, color = cl_cah,text = paste("Classe: ", cl_cah, '<br>',"Station:", from_station_name,'<br>', "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
+      labs(x="Longitude",y="Latitude",color="Classes") +
+      labs(title = paste("Visualisation des ",nbcl,"classes de trajets"), subtitle = "Selon la station d'arrivée")+
+      facet_wrap(~cl_cah)
+to   
+
+rm(from,to)
+rm(trajets_res)
+rm(cl_cah,nbcl)
+```
+
