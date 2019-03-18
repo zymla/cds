@@ -34,17 +34,57 @@ shinyUI(dashboardPage(
                             tabItems(
                               # First tab content : a homepage? to describe data? 
                               #==========================================================================================================================
-                              tabItem(tabName = "dashboard", h2("dashboard tab content")#,
-                                      #fluidRow(
-                                  
-                              #    box(plotOutput("distPlot", height = 200)),
-                              #    box(title = "Number of bins", 
-                              #        sliderInput("bins",
-                              #                    "Number of bins:",
-                              #                    min = 1,
-                              #                    max = 50,
-                              #                    value = 30))
-                              #        ) # fluidRow1
+                              tabItem(tabName = "dashboard", h2("dashboard tab content"),
+                                      fluidRow(
+                                        column(width = 4,
+                                               box(
+                                                 title = " 1 Extraction des données du site divyy", width = NULL, status = "primary",
+                                                 "site web divyy,
+                                                 2 jeux de données : relevé des stations et des trajets, 
+                                                 année 2017, XX Go, 
+                                                 XX stations, XX trajets/jour/moyenne"
+                                               ),
+                                               box(
+                                                 title = "Contenu de la base stations", width = NULL, solidHeader = TRUE, status = "primary",
+                                                 "identifiant, localisation geographique, capacité, disponibilité des vélos, statut de fonctionnement des bornes, le tout horodaté, 
+                                                 "
+                                               ),
+                                               box(
+                                                 title = "Contenu de la base des trajets", width = NULL, background = "black",
+                                                 "Identifiant des stations de départ et d'arrivée, localisation des stations de départ et d'arrivée, heures
+                                                 d'arrivée et de départ, durée du trajet, identifiant du vélo et identifiant du trajet, statut d'abonnement du cycliste, 
+                                                 si abonné information sur l'age et le sexe"
+                                               )
+                                               ), # column 1
+                                        
+                                        column(width = 4,
+                                               box(
+                                                 status = "warning", width = NULL,
+                                                 "Box content"
+                                               ),
+                                               box(
+                                                 title = "Title 3", width = NULL, solidHeader = TRUE, status = "warning",
+                                                 "Box content"
+                                               ),
+                                               box(
+                                                 title = "Title 5", width = NULL, background = "light-blue",
+                                                 "A box with a solid light-blue background"
+                                               )
+                                        ), # column 2
+                                        
+                                        column(width = 4,
+                                               box(
+                                                 title = "Title 2", width = NULL, solidHeader = TRUE,
+                                                 "Box content"
+                                               ),
+                                               box(
+                                                 title = "Title 6", width = NULL, background = "maroon",
+                                                 "A box with a solid maroon background"
+                                               )
+                                        ) # column 3
+                                      ) # fluidrow
+                                      
+                              
                                 ), # tabitem1 
 
                               
@@ -105,9 +145,9 @@ shinyUI(dashboardPage(
                               
                               
                               
-                              # Second tab content : Anissa's stuffs
+                              # Second tab content : Stats des
                               #===========================================================================================================================
-                              tabItem(tabName = "TrajetsClusTab" ,  h2("Widgets tab content"),
+                              tabItem(tabName = "dashboard",  h2("Widgets tab content"),
                                       fluidRow(
                                         column(width = 4,
                                                box(
@@ -128,7 +168,7 @@ shinyUI(dashboardPage(
                                                  d'arrivée et de départ, durée du trajet, identifiant du vélo et identifiant du trajet, statut d'abonnement du cycliste, 
                                                  si abonné information sur l'age et le sexe"
                                                )
-                                        ),
+                                        ), # column 1
                                         
                                         column(width = 4,
                                                box(
@@ -143,7 +183,7 @@ shinyUI(dashboardPage(
                                                  title = "Title 5", width = NULL, background = "light-blue",
                                                  "A box with a solid light-blue background"
                                                )
-                                        ),
+                                        ), # column 2
                                         
                                         column(width = 4,
                                                box(
@@ -155,60 +195,67 @@ shinyUI(dashboardPage(
                                                  "A box with a solid maroon background"
                                                )
                                         ) # column 3
-                                      )
- 
+                                      ) # fluidrow
                         
                                        ),  # tabitem2      
                             
                             
                             
-                              # Third tab content : random stuffs
+                              # Third tab content : Anissa's stuffs
                               #===========================================================================================================================
-                              tabItem(tabName = "widgets",  h2("Widgets tab content"),
-                                      fluidRow(
-                                        column(width = 4,
+                              tabItem(tabName = "TrajetsClusTab",  h2("Clustering des trajets"),
+                                      fluidRow( 
+                                              box(title = "Paramètres d'entrée", status = "primary", solidHeader = TRUE, collapsible = TRUE, width = 3, 
+                                                   checkboxGroupInput("jour", label = "Jours",
+                                                                      choices=c("Lundi"= 2,  "Mardi"=3, "Mercredi"=4,  "Jeudi"=5,
+                                                                                "Vendredi"=6,  "Samedi"=7, "Dimanche"=0),
+                                                                      selected = c(2)),     
+                                                   
+                                                   checkboxGroupInput("unique", label = "Type de trajets",
+                                                                      choices=c("Tous"= "tous",  "Unique"="unique", "Non unique"="nonunique"), 
+                                                                      selected = c("tous")),  
+                                                   
+                                                   checkboxGroupInput("methode", label = "Méthode",
+                                                                      choices=c( "K-means"=  "kmeans",   "K-means ++"= "kmeanspp", "dbscan"="dbscan"), 
+                                                                      selected = c("dbscan")),  
+                                                   
+                                                   checkboxGroupInput("algo", label = "Algorithme",
+                                                                      choices=c( "Hartigan-Wong"=  "Hartigan-Wong",   "Lloyd"= "Lloyd", "Forgy"="Forgy", 
+                                                                                 "MacQueen"="MacQueen"), 
+                                                                      selected = c("MacQueen")),  
+                                                   sliderInput("nbcl",  "Number of clusters:", min = 1L, max = 12L, value = 6L, step = 1L),
+                                                  
+                                                   sliderInput("ch_minPts", "Pour dbscan: Nombre de pts dans le voisinage", 
+                                                                min = 1L, max = 12L, value = 4L, step = 1L),
+                                                   
+                                                   checkboxGroupInput("maselec", label = "Sélection de variables explicatives",
+                                                                      choices = c("Nombre de trajets" = "nb_trips", "Abonnement" = "pct_abonne",
+                                                                                  "moy_from_bikes" =  "moy_from_bikes","moy_to_bikes" = "moy_to_bikes",
+                                                                                  "moy_from_trips"="moy_from_trips","moy_to_trips" = "moy_to_trips",
+                                                                                  "from_nbst_300m"= "from_nbst_300m","to_nbst_300m" = "to_nbst_300m",
+                                                                                  "from_nbst_1km"= "from_nbst_1km","to_nbst_1km"="to_nbst_1km",
+                                                                                  "moy_distHav"="moy_distHav","moy_trip_duration"="moy_trip_duration",
+                                                                                  "start_moy_total_docks"="start_moy_total_docks","start_moy_docks_in_service"="start_moy_docks_in_service",
+                                                                                  "start_moy_available_docks"= "start_moy_available_docks","start_moy_pct_full"="start_moy_pct_full",
+                                                                                  "stop_moy_total_docks"="stop_moy_total_docks","stop_moy_docks_in_service"="stop_moy_docks_in_service",
+                                                                                  "stop_moy_available_docks"="stop_moy_available_docks","stop_moy_pct_full"="stop_moy_pct_full"), 
+                                                                      selected =  c("nb_trips", "pct_abonne",
+                                                                                    "moy_from_bikes","moy_to_bikes","moy_from_trips","moy_to_trips",
+                                                                                    "from_nbst_300m","to_nbst_300m","from_nbst_1km","to_nbst_1km",
+                                                                                    "moy_distHav","moy_trip_duration",
+                                                                                    "start_moy_total_docks","start_moy_docks_in_service","start_moy_available_docks","start_moy_pct_full",
+                                                                                    "stop_moy_total_docks","stop_moy_docks_in_service","stop_moy_available_docks","stop_moy_pct_full"))
+                                                                       
+                                              ),
                                                box(
-                                                 title = "Box title", width = NULL, status = "primary",
-                                                 "Données 2017"
+                                                 title = "Stations de départ", width = 9, height = 500, solidHeader = TRUE, status = "primary",
+                                                 plotlyOutput("trajets_from")
                                                ),
                                                box(
-                                                 title = "Title 1", width = NULL, solidHeader = TRUE, status = "primary",
-                                                 "Box content"
-                                               ),
-                                               box(
-                                                 width = NULL, background = "black",
-                                                 "A box with a solid black background"
+                                                 title = "Stations d'arrivée", width = 9, height = 500, solidHeader = TRUE, status = "primary",
+                                                 plotlyOutput("trajets_to")
                                                )
-                                        ),
-                                        
-                                        column(width = 4,
-                                               box(
-                                                 status = "warning", width = NULL,
-                                                 "Box content"
-                                               ),
-                                               box(
-                                                 title = "Title 3", width = NULL, solidHeader = TRUE, status = "warning",
-                                                 "Box content"
-                                               ),
-                                               box(
-                                                 title = "Title 5", width = NULL, background = "light-blue",
-                                                 "A box with a solid light-blue background"
-                                               )
-                                        ),
-                                        
-                                        column(width = 4,
-                                               box(
-                                                 title = "Title 2", width = NULL, solidHeader = TRUE,
-                                                 "Box content"
-                                               ),
-                                               box(
-                                                 title = "Title 6", width = NULL, background = "maroon",
-                                                 "A box with a solid maroon background"
-                                               )
-                                        ) # column 3
-                                      )
-                                      
-                                      
+                                      ) # fluidrow
                               ),  # tabitem2      
                               
                             

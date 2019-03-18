@@ -337,6 +337,7 @@ shinyServer(function(input, output) {
     V(g)[which(V(g)$name == myNode$selected)]$size <- 60
     
     return(list(visu_stations, g, departs, arrivees))
+  
     
   })
 
@@ -738,11 +739,95 @@ shinyServer(function(input, output) {
   })
     
   
+  # ==============================================================================================  
+  # Anissa's functions
+  # ==============================================================================================  
+  
+  freact_anissa <- reactive({
+    
+    if (input$unique == "tous"){
+      trajets_cl<-copy(trajets[wday_n == input$jour & nb_trips > 0 , input$maselec, with=FALSE])
+      trajets_id<-copy(trajets[wday_n == input$jour & nb_trips > 0 , c("trajet_id")])
+      print("in unique loop")
+    } else {
+      if (input$unique == "nonunique"){
+        trajets_cl<-copy(trajets[wday_n == input$jour & nb_trips > 1 , input$maselec, with=FALSE])
+        trajets_id<-copy(trajets[wday_n == input$jour & nb_trips > 1 , c("trajet_id")])
+      }else{
+        trajets_cl<-copy(trajets[wday_n == input$jour & nb_trips == 1 , input$maselec, with=FALSE])
+        if (is.na(match("nb_trips",names(trajets_cl)))==FALSE) {
+          trajets_cl<-trajets_cl[,-c("nb_trips")]
+        }
+        trajets_id<-copy(trajets[wday_n==input$jour & nb_trips == 1 ,c("trajet_id")])
+      }
+    } # if loop 
+    
+    set.seed(12345)
+    if (input$methode == "kmeans"){
+      km_hw<- kmeans(scale(trajets_cl, center=T, scale=T), centers=input$nbcl, iter.max=2000, algorithm = input$algo, nstart=50)
+    } # if loop 
+    
+    if (input$methode == "kmeanspp"){
+      km_hw <- kmeanspp(scale(trajets_cl,center=T,scale=T), k = input$nbcl, start = "random", iter.max = 1000, nstart = 20, 
+                        algorithm=input$algo)
+    } # if loop            
+    
+    
+    if (input$methode == "dbscan"){       
+      dbscan::kNNdistplot(scale(trajets_cl,center=T,scale=T), k=input$ch_minPts)
+      averageDist <- colMeans(dbscan::kNNdist(scale(trajets_cl,center=T,scale=T),k=ch_minPts))
+      eps_opt<-mean(averageDist)
+      
+      res_dbscan <- dbscan::dbscan(scale(trajets_cl, center=T, scale=T), eps=eps_opt, minPts=ch_minPts)
+      rm(eps_opt,averageDist)
+      
+      # pour cohérence avec les autres routines 
+      km_hw = res_dbscan
+      rm(res_dbscan)
+    } # if loop    
+    
+    # Ajout des coordonn?ees g?ographiques pour la visualisation graphique des classes
+    trajets_res <- cbind.data.frame(trajets_cl, trajets_id, cl_km_hw = factor(km_hw$cluster))
+    trajets_res <- merge(trajets_res, des_trajets, by=c("trajet_id"), all.x=TRUE)
+    rm(km_hw)
+    
+    return(trajets_res)
+  }) # freact
   
   
+
+  
+  output$trajets_from <- renderPlotly({
+    trajets_res <- freact_anissa()
+    from <-trajets_res[] %>% 
+      ggplot() +
+      geom_point(data = trajets_res[, .(from_longitude, from_latitude)], aes(from_longitude, from_latitude),
+                 color = 'gray') +
+      geom_point(aes(from_longitude, from_latitude, color = cl_km_hw, 
+                     text = paste("Classe: ", cl_km_hw, '<br>',"Station:", from_station_name,'<br>', "Longitude:",
+                                  from_longitude,'<br>',"Latitude:",from_latitude))) +
+      labs(x="Longitude", y="Latitude", cl_km_hw="Classes")+
+      labs(title = paste("Visualisation des ", input$nbcl,"classes de trajets"), subtitle = "Selon la station de d?part")+
+      facet_wrap(~cl_km_hw)
+    from
+  }) # renderplotly
   
   
-  
+  output$trajets_to <- renderPlotly({
+    trajets_res <- freact_anissa()
+    to <- trajets_res[] %>% 
+      ggplot() +
+      geom_point(data = trajets_res[, .(to_longitude, to_latitude)], aes(to_longitude, to_latitude),
+                 color = 'gray') +
+      geom_point(aes(to_longitude, to_latitude, color = cl_km_hw,
+                     text = paste("Classe: ", cl_km_hw, '<br>',"Station:", from_station_name,'<br>', 
+                                  "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
+      labs(x="Longitude",y="Latitude",color="Classes") +
+      labs(title = paste("Visualisation des ",input$nbcl,"classes de trajets"), subtitle = "Selon la station d'arriv?e")+
+      facet_wrap(~cl_km_hw)
+    to   
+    
+  }) # renderplotly
   
   
   
