@@ -1,0 +1,135 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(lubridate)
+library(data.table)
+```
+
+
+
+```{r}
+#stations
+tmpfs <- fread("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/data_raw/divvy_stations_2019_02_22_00_56_01_7741b595ace.csv")
+```
+
+```{r}
+tmpfs<-tmpfs[,c("id","timestamp","total_docks")]
+tmpfs[,timestamp := as_datetime(timestamp)]
+# 30 461 901
+```
+
+```{r}
+tmpfs <- tmpfs[,year:=year(timestamp)]
+```
+
+
+Nombre de stations différentes :
+--------------------------------
+
+```{r}
+nb_stations<-unique(tmpfs[,c("id")])
+nrow(nb_stations)
+rm(nb_stations)
+```
+
+Combien de stations en fonctionnement toute l'année 2017 (présence 12 mois) ?
+```{r}
+mois<-tmpfs[,c("id","timestamp")][,mois:=month(timestamp)]
+mois<-unique(mois[,c("id","mois")])
+setorderv(mois,c("id","mois"))
+mois<-unique(mois[,nb_mois:=.N,by=c("id")][,c("id","nb_mois")])
+Pct<-as.data.table(prop.table(table(mois[,nb_mois])*100))
+Pct
+```
+
+```{r}
+rm(mois,tmpfs,Pct)
+```
+
+
+```{r}
+trips <- fread("D:/Formations/CEPE_2018_Formation_DataScience/Projet_formation/data_raw/divvy_trips_2019_02_22_00_51_40_774496853fd.csv")
+```
+
+```{r}
+trips[,`:=`(start_time = as_datetime(start_time),stop_time = as_datetime(stop_time))] 
+trips <- trips[year(start_time)==2017,]
+trips <- trips[,mois:=month(start_time)]
+trips <- trips[,jour:=day(start_time)]
+trips<-trips[,c("bike_id","from_station_id","to_station_id","trip_id","user_type","mois","jour")]
+```
+
+
+Nombre de trajets différents réalisés :
+
+```{r}
+nrow(trips)
+```
+
+Nombre de trajets différents par mois :
+
+```{r}
+as.data.table(prop.table(table(trips[,c("mois")]))*100)
+```
+
+Distribution du nombre de trajets par jour (moyenne, médiane)
+
+```{r}
+jours<-unique(trips[,nb_jours:=.N,by=c("jour","mois")][,c("jour","mois","nb_jours")])
+summary(jours[,nb_jours])
+```
+
+Nombre de vélos différents :
+
+```{r}
+nrow(unique(trips[,c("bike_id")]))
+```
+Part des trajets réalisés par des cyclistes abonnés (en %) :
+
+```{r}
+trips<-trips[,abonne:=ifelse(user_type=="Subscriber",1L,0L)]
+mean(trips[,abonne])*100
+```
+
+Distribution des trajets quotidiens dans le mois
+
+```{r}
+jours<-jours[,fmois:=as.factor(mois)]
+
+library(ggthemes)
+library(ggplot2)
+
+g <- ggplot(jours, aes(fmois, nb_jours))
+g + geom_boxplot(aes(fill=factor(mois))) + 
+  theme(axis.text.x = element_text(vjust=0.6)) + 
+  theme(legend.position='none') +
+  labs(title="Box plot", 
+       subtitle="Nombre de trajets quotidiens par mois",
+       x="Mois",
+       y="Nombre de trajets quotidiens")
+```
+
+```{r}
+jours<-jours[,jm:=paste(jour," - ",mois)]
+
+g <- ggplot(jours, aes(jm, nb_jours))
+g + geom_bar(stat="identity", width = 1, fill="tomato2") + 
+      labs(title="Bar Chart", 
+           subtitle="Evolution du nombre de trajets quotidiens",
+           x="Jour",
+            y="Nombre de trajets") +
+      theme(axis.text.x = element_text(angle=65, vjust=1))
+```
+
+
+
+
