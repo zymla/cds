@@ -17,6 +17,7 @@ library(tictoc)
 library(plotly)
 library(scales)
 library(igraph)
+library(cluster)
 
 
 
@@ -783,7 +784,6 @@ shinyServer(function(input, output) {
                         algorithm=input$algo)
     } # if loop            
     
-    
     if (input$methode_anissa == "dbscan"){       
       dbscan::kNNdistplot(scale(trajets_cl,center=T,scale=T), k=input$ch_minPts)
       averageDist <- colMeans(dbscan::kNNdist(scale(trajets_cl,center=T,scale=T),k=ch_minPts))
@@ -797,11 +797,19 @@ shinyServer(function(input, output) {
       rm(res_dbscan)
     } # if loop    
     
-    # Ajout des coordonn?ees g?ographiques pour la visualisation graphique des classes
-    trajets_res <- cbind.data.frame(trajets_cl, trajets_id, cl_km_hw = factor(km_hw$cluster))
-    trajets_res <- merge(trajets_res, des_trajets, by=c("trajet_id"), all.x=TRUE)
-    rm(km_hw)
-    
+    if (input$methode_anissa == "clara"){     
+      clara <- clara(scale(trajets_cl, center=T, scale=T), metric = input$distm, pamLike =TRUE, stand=TRUE, samples=500, input$nbcl)
+  
+      # Ajout des coordonn?ees g?ographiques pour la visualisation graphique des classes
+      trajets_res <- cbind.data.frame(trajets_cl, trajets_id, cl_km_hw=factor(clara$clustering))
+      trajets_res <- merge(trajets_res,des_trajets,by=c("trajet_id"),all.x=TRUE)
+      rm(clara)
+     } else {
+      # Ajout des coordonn?ees g?ographiques pour la visualisation graphique des classes
+      trajets_res <- cbind.data.frame(trajets_cl, trajets_id, cl_km_hw = factor(km_hw$cluster))
+      trajets_res <- merge(trajets_res, des_trajets, by=c("trajet_id"), all.x=TRUE)
+      rm(km_hw)
+     }
     return(trajets_res)
   }) # freact
   

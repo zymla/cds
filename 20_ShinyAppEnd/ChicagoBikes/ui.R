@@ -140,8 +140,9 @@ shinyUI(dashboardPage(skin = "blue",
                                                                       selected = c("tous")),  
                                                    
                                                    checkboxGroupInput("methode_anissa", label = "Méthode",
-                                                                      choices=c( "K-means"=  "kmeans",   "K-means ++"= "kmeanspp", "dbscan"="dbscan"), 
-                                                                      selected = c("kmeans")),  
+                                                                      choices=c( "K-means"=  "kmeans",   "K-means ++"= "kmeanspp", "dbscan"="dbscan", 
+                                                                                 "clara" = "clara"), 
+                                                                      selected = c("clara")),  
                                                    
                                                    checkboxGroupInput("algo", label = "Algorithme",
                                                                       choices=c( "Hartigan-Wong"=  "Hartigan-Wong",   "Lloyd"= "Lloyd", "Forgy"="Forgy", 
@@ -152,6 +153,11 @@ shinyUI(dashboardPage(skin = "blue",
                                                    sliderInput("ch_minPts", "Pour dbscan: Nombre de pts dans le voisinage", 
                                                                 min = 1L, max = 12L, value = 4L, step = 1L),
                                                    
+                                                   checkboxGroupInput("distm", label = "Distance Minimale (Pour l'algorithme Clara)",
+                                                                     choices=c( "euclidean"="euclidean", "manhattan" = "manhattan", 
+                                                                                "jaccard" = "jaccard"), 
+                                                                     selected = c("euclidean")),  
+                                                  
                                                    checkboxGroupInput("maselec", label = "Sélection de variables explicatives",
                                                                       choices = c("Nombre de trajets" = "nb_trips", "Abonnement" = "pct_abonne",
                                                                                   "moy_from_bikes" =  "moy_from_bikes","moy_to_bikes" = "moy_to_bikes",
