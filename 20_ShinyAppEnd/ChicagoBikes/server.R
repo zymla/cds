@@ -18,6 +18,8 @@ library(plotly)
 library(scales)
 library(igraph)
 library(cluster)
+library(ggthemes)
+library(ggplot2)
 
 
 
@@ -813,18 +815,17 @@ shinyServer(function(input, output) {
     return(trajets_res)
   }) # freact
   
-  
 
   
   output$trajets_from <- renderPlotly({
-    trajets_res <- freact_anissa()
-    from <-trajets_res[] %>% 
+    trajets_res <<- freact_anissa()
+    from <-trajets_res[, .(sum_nb_trips = sum(nb_trips), N = .N), .(from_longitude, from_latitude, from_station_name, cl_km_hw)] %>% 
       ggplot() +
-      geom_point(data = trajets_res[, .(from_longitude, from_latitude)], aes(from_longitude, from_latitude),
+      geom_point(data = trajets_res[, .(.N), .(from_longitude, from_latitude)], aes(from_longitude, from_latitude),
                  color = 'gray') +
       geom_point(aes(from_longitude, from_latitude, color = cl_km_hw, 
                      text = paste("Classe: ", cl_km_hw, '<br>',"Station:", from_station_name,'<br>', "Longitude:",
-                                  from_longitude,'<br>',"Latitude:",from_latitude))) +
+                                  from_longitude,'<br>',"Latitude:",from_latitude, "<br> Nb trajets:", N))) +
       labs(x="Longitude", y="Latitude", color="Classes")+
       #labs(title = paste("Visualisation des ", input$nbcl,"classes de trajets"), subtitle = "Selon la station de d?part")+
       facet_wrap(~cl_km_hw)
@@ -834,13 +835,13 @@ shinyServer(function(input, output) {
   
   output$trajets_to <- renderPlotly({
     trajets_res <- freact_anissa()
-    to <- trajets_res[] %>% 
+    to <- trajets_res[, .(sum_nb_trips = sum(nb_trips), N = .N), .(to_longitude, to_latitude, to_station_name, cl_km_hw)] %>% 
       ggplot() +
-      geom_point(data = trajets_res[, .(to_longitude, to_latitude)], aes(to_longitude, to_latitude),
+      geom_point(data = trajets_res[, .(.N), .(to_longitude, to_latitude)], aes(to_longitude, to_latitude),
                  color = 'gray') +
       geom_point(aes(to_longitude, to_latitude, color = cl_km_hw,
-                     text = paste("Classe: ", cl_km_hw, '<br>',"Station:", from_station_name,'<br>', 
-                                  "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
+                     text = paste("Classe: ", cl_km_hw, '<br>',"Station:", to_station_name,'<br>', 
+                                  "Longitude:",to_longitude,'<br>',"Latitude:",to_latitude, "<br> Nb trajets:", N))) +
       labs(x="Longitude",y="Latitude",color="Classes") +
       #labs(title = paste("Visualisation des ",input$nbcl,"classes de trajets"), subtitle = "Selon la station d'arriv?e")+
       facet_wrap(~cl_km_hw)
@@ -848,11 +849,39 @@ shinyServer(function(input, output) {
     
   }) # renderplotly
   
-  url <- a("Divyy Bikes Homepage", href="https://www.divvybikes.com/")
+  url <- a("Divvy Bikes Homepage", href="https://www.divvybikes.com/")
   output$tab <- renderUI({
     tagList("URL link:", url)
   })
+ 
   
+  
+  
+ 
+  
+  output$trajets_par_jours <- renderPlot({
+  jours <- readRDS("jours.rda")
+  
+  g <- ggplot(jours, aes(fmois, nb_jours))
+  g + geom_boxplot(aes(fill=factor(mois))) + 
+    theme(axis.text.x = element_text(vjust=0.6)) + 
+    theme(legend.position='none') +
+    labs(x="Mois",
+         y="Nombre de trajets quotidiens") +
+    scale_y_continuous(breaks=seq(0,24000,2000),limits=c(0, 24000))
+  })
+  
+  output$trajets_par_heure<- renderPlot({
+  repart_heure <- fichier_graphe[,.(Nb_trajets = sum(N)), by=c("hr_depart")]
+  repart_heure[,Nb_trajets_moy:=as.numeric(Nb_trajets/365)]
+  
+  p <- ggplot(data=repart_heure,aes(x=hr_depart,y=Nb_trajets_moy)) + geom_bar(stat="identity", fill="steelblue")+
+    theme(plot.title=element_text(hjust = 0.5)) + labs(title="", x="Heure", y="Nombre de trajets moyen")
+  p
+  })
+  
+  
+     
   # ==============================================================================================  
   # Geyser historgram
   output$distPlot <- renderPlot({
