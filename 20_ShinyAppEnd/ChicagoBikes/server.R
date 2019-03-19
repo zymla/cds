@@ -21,15 +21,7 @@ library(igraph)
 
 
 
-# Magda's stuffs : Lecture et mise en forme de fichiers
-#------------------------------------------------------------------------------------
-fichier_graphe <- fread("../../graphes_matrice.csv")
-fichier_stations <- fread("../../graphes_stations.csv")
-fichier_graphe$from_station_id <- as.character(fichier_graphe$from_station_id)
-fichier_graphe$to_station_id <- as.character(fichier_graphe$to_station_id)
-fichier_stations$id <- as.character(fichier_stations$id)
-print("FICHIERS IMPORTES")
-#------------------------------------------------------------------------------------
+
 #------------------------------------------------------------------------------------
 # Jan's stuffs 
 
@@ -151,6 +143,21 @@ print("Done creating features")
 # ==============================================================================================  
 
 
+# Anissa's stuffs
+# Read data files
+trajets <- readRDS("trajets.rda")
+des_trajets <- readRDS("des_trajets.rda")  
+
+
+# Magda's stuffs : Lecture et mise en forme de fichiers
+#------------------------------------------------------------------------------------
+fichier_graphe <- fread("../../graphes_matrice.csv")
+fichier_stations <- fread("../../graphes_stations.csv")
+fichier_graphe$from_station_id <- as.character(fichier_graphe$from_station_id)
+fichier_graphe$to_station_id <- as.character(fichier_graphe$to_station_id)
+fichier_stations$id <- as.character(fichier_stations$id)
+print("FICHIERS IMPORTES")
+#------------------------------------------------------------------------------------
 
 
 # Define server logic required to draw a histogram
@@ -162,6 +169,7 @@ shinyServer(function(input, output) {
   
  
   freact <- reactive({
+    input$recompute_magda
     fg <<- fichier_graphe
     co_occ_oriented <- fichier_graphe[
       weekday %in% input$Jours & hr_depart <= input$Choix_heure[2] & hr_depart >= input$Choix_heure[1] & to_station_id != from_station_id, .(from_station_id, to_station_id, N)
@@ -326,7 +334,9 @@ shinyServer(function(input, output) {
       V(g)$label <- paste0(V(g)$label,", Communauté : ",col_split)
     }
     
-    
+    print("check color!!!")
+    print(color_vector)
+    print(head(V(g)$color))
     visu_stations <- data.table(V(g)$name, V(g)$color, V(g)$label, V(g)$size)
     setnames(visu_stations, old = c("V1", "V2","V3","V4"), new = c("id", "station_color","station_name","total_docks"))
     
@@ -336,9 +346,10 @@ shinyServer(function(input, output) {
     V(g)[which(V(g)$name == myNode$selected)]$color <- "black"
     V(g)[which(V(g)$name == myNode$selected)]$size <- 60
     
+    
     return(list(visu_stations, g, departs, arrivees))
   
-    
+    print(head())
   })
 
   # End of freact_magda  
@@ -763,17 +774,17 @@ shinyServer(function(input, output) {
     } # if loop 
     
     set.seed(12345)
-    if (input$methode == "kmeans"){
+    if (input$methode_anissa == "kmeans"){
       km_hw<- kmeans(scale(trajets_cl, center=T, scale=T), centers=input$nbcl, iter.max=2000, algorithm = input$algo, nstart=50)
     } # if loop 
     
-    if (input$methode == "kmeanspp"){
+    if (input$methode_anissa == "kmeanspp"){
       km_hw <- kmeanspp(scale(trajets_cl,center=T,scale=T), k = input$nbcl, start = "random", iter.max = 1000, nstart = 20, 
                         algorithm=input$algo)
     } # if loop            
     
     
-    if (input$methode == "dbscan"){       
+    if (input$methode_anissa == "dbscan"){       
       dbscan::kNNdistplot(scale(trajets_cl,center=T,scale=T), k=input$ch_minPts)
       averageDist <- colMeans(dbscan::kNNdist(scale(trajets_cl,center=T,scale=T),k=ch_minPts))
       eps_opt<-mean(averageDist)
@@ -806,8 +817,8 @@ shinyServer(function(input, output) {
       geom_point(aes(from_longitude, from_latitude, color = cl_km_hw, 
                      text = paste("Classe: ", cl_km_hw, '<br>',"Station:", from_station_name,'<br>', "Longitude:",
                                   from_longitude,'<br>',"Latitude:",from_latitude))) +
-      labs(x="Longitude", y="Latitude", cl_km_hw="Classes")+
-      labs(title = paste("Visualisation des ", input$nbcl,"classes de trajets"), subtitle = "Selon la station de d?part")+
+      labs(x="Longitude", y="Latitude", color="Classes")+
+      #labs(title = paste("Visualisation des ", input$nbcl,"classes de trajets"), subtitle = "Selon la station de d?part")+
       facet_wrap(~cl_km_hw)
     from
   }) # renderplotly
@@ -823,14 +834,16 @@ shinyServer(function(input, output) {
                      text = paste("Classe: ", cl_km_hw, '<br>',"Station:", from_station_name,'<br>', 
                                   "Longitude:",from_longitude,'<br>',"Latitude:",from_latitude))) +
       labs(x="Longitude",y="Latitude",color="Classes") +
-      labs(title = paste("Visualisation des ",input$nbcl,"classes de trajets"), subtitle = "Selon la station d'arriv?e")+
+      #labs(title = paste("Visualisation des ",input$nbcl,"classes de trajets"), subtitle = "Selon la station d'arriv?e")+
       facet_wrap(~cl_km_hw)
     to   
     
   }) # renderplotly
   
-  
-  
+  url <- a("Divyy Bikes Homepage", href="https://www.divvybikes.com/")
+  output$tab <- renderUI({
+    tagList("URL link:", url)
+  })
   
   # ==============================================================================================  
   # Geyser historgram
