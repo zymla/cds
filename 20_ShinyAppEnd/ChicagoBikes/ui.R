@@ -161,7 +161,7 @@ shinyUI(dashboardPage(skin = "blue",
     
                                                   conditionalPanel(
                                                                   condition = "input.methode_anissa == 'kmeans'", 
-                                                                  radioButtons("kmeansAlgo", label = "Algorithme k-means", 
+                                                                  radioButtons("algo", label = "Algorithme k-means", 
                                                                                choices = c("Hartigan-Wong", "Lloyd", "Forgy", "MacQueen"), 
                                                                               select = "MacQueen")), 
                                                   
