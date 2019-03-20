@@ -788,10 +788,10 @@ shinyServer(function(input, output) {
     
     if (input$methode_anissa == "dbscan"){       
       dbscan::kNNdistplot(scale(trajets_cl,center=T,scale=T), k=input$ch_minPts)
-      averageDist <- colMeans(dbscan::kNNdist(scale(trajets_cl,center=T,scale=T),k=ch_minPts))
+      averageDist <- colMeans(dbscan::kNNdist(scale(trajets_cl,center=T,scale=T),k=input$ch_minPts))
       eps_opt<-mean(averageDist)
       
-      res_dbscan <- dbscan::dbscan(scale(trajets_cl, center=T, scale=T), eps=eps_opt, minPts=ch_minPts)
+      res_dbscan <- dbscan::dbscan(scale(trajets_cl, center=T, scale=T), eps=eps_opt, minPts=input$ch_minPts)
       rm(eps_opt,averageDist)
       
       # pour cohérence avec les autres routines 
@@ -819,7 +819,7 @@ shinyServer(function(input, output) {
   
   output$trajets_from <- renderPlotly({
     trajets_res <<- freact_anissa()
-    from <-trajets_res[, .(sum_nb_trips = sum(nb_trips), N = .N), .(from_longitude, from_latitude, from_station_name, cl_km_hw)] %>% 
+    from <-trajets_res[, .(N = .N), .(from_longitude, from_latitude, from_station_name, cl_km_hw)] %>% 
       ggplot() +
       geom_point(data = trajets_res[, .(.N), .(from_longitude, from_latitude)], aes(from_longitude, from_latitude),
                  color = 'gray') +
@@ -835,7 +835,7 @@ shinyServer(function(input, output) {
   
   output$trajets_to <- renderPlotly({
     trajets_res <- freact_anissa()
-    to <- trajets_res[, .(sum_nb_trips = sum(nb_trips), N = .N), .(to_longitude, to_latitude, to_station_name, cl_km_hw)] %>% 
+    to <- trajets_res[, .(N = .N), .(to_longitude, to_latitude, to_station_name, cl_km_hw)] %>% 
       ggplot() +
       geom_point(data = trajets_res[, .(.N), .(to_longitude, to_latitude)], aes(to_longitude, to_latitude),
                  color = 'gray') +
