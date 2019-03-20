@@ -527,7 +527,7 @@ shinyServer(function(input, output) {
     
     km_cent <- input$nb_clusters # PARAMETRE A FAIRE VARIER
     cluster_palette <- hue_pal()(km_cent)
-    classifST <- kmeans(station_movements_kmeans_input[, 2:ncol(station_movements_kmeans_input)], centers = km_cent, algorithm = input$kmeansAlgo) 
+    classifST <- kmeans(station_movements_kmeans_input[, 2:ncol(station_movements_kmeans_input)], centers = km_cent, algorithm = input$kmeansAlgo, iter.max=50) 
     stationsKM <- cbind(station_movements_kmeans_input, classeKM = factor(classifST$cluster))
     print(paste("Nb_cluster=", km_cent))
     
