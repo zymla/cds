@@ -440,7 +440,7 @@ shinyServer(function(input, output) {
   output$txtDeparts = renderText({
     if(nrow(freact()[[3]][which(myNode$selected == freact()[[3]]$from_station_id),])!=0){
       paste0("Nombre de départs par heure : ", 
-             round((freact()[[3]][from_station_id == myNode$selected]$V1 / (length(input$Jours) * (input$Choix_heure[2] - input$Choix_heure[1]) * 52)),1)
+             round((freact()[[3]][from_station_id == myNode$selected]$V1 / (length(input$Jours) * (input$Choix_heure[2] - input$Choix_heure[1]) * 52)),2)
       )
     } else {}
   }) 
@@ -448,7 +448,7 @@ shinyServer(function(input, output) {
   output$txtArrivees = renderText({
     if(nrow(freact()[[4]][which(myNode$selected == freact()[[4]]$to_station_id),])!=0){
       paste0("Nombre d'arrivées par heure : ", 
-             round((freact()[[4]][to_station_id == myNode$selected]$V1 / (length(input$Jours) * (input$Choix_heure[2] - input$Choix_heure[1]) * 52)),1)
+             round((freact()[[4]][to_station_id == myNode$selected]$V1 / (length(input$Jours) * (input$Choix_heure[2] - input$Choix_heure[1]) * 52)),2)
       )
     } else {}
   }) 
